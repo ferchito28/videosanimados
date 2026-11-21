@@ -226,7 +226,7 @@ export async function cargarFuente() {
 }
 
 // subs: [[t, 'TEXTO', amarillo?], ...]
-export function subtitulos(ctx, subs, t, y = 0.46 * ALTO) {
+export function subtitulos(ctx, subs, t, y = 0.6 * ALTO) {
   let actual = null;
   for (const s of subs) { if (s[0] <= t) actual = s; else break; }
   if (!actual || actual[1] === '') return;
@@ -253,4 +253,68 @@ export function componer(r, subs, t) {
   r.ctx.drawImage(r.gl.domElement, 0, 0);
   if (subs) subtitulos(r.ctx, subs, t);
   return r.salida.toDataURL('image/jpeg', 0.9);
+}
+
+// ----------------------------------------------------------- utilería 3D
+export function mezcladora(escena, x, z, rotY = 0) {
+  const g = new THREE.Group();
+  const blanco = toon(0xf2f2f2), naranja = toon(0xff7a1f), gris = toon(0x55555c), negro = toon(0x222226);
+  g.add(malla(new THREE.BoxGeometry(2.6, 0.5, 8), gris, 0, 1.1, 0));
+  const cab = malla(new THREE.BoxGeometry(2.6, 2.3, 2.2), naranja, 0, 2.3, 3.4);
+  g.add(cab, malla(new THREE.BoxGeometry(2.3, 0.9, 0.1), sinContorno(toon(0x9fd3ff)), 0, 2.9, 4.52, false));
+  const tambor = malla(new THREE.CylinderGeometry(1.15, 1.45, 4.6, 20), blanco, 0, 2.9, -1.2);
+  tambor.rotation.x = Math.PI / 2 - 0.25;
+  g.add(tambor);
+  for (let i = 0; i < 3; i++) {
+    const banda = malla(new THREE.TorusGeometry(1.32 - i * 0.08, 0.1, 8, 24), naranja, 0, 2.9 + (i - 1) * 0.35, -1.2 + (i - 1) * 1.3);
+    banda.rotation.x = -0.25; g.add(banda);
+  }
+  [[-1.3, 3], [1.3, 3], [-1.3, -1.6], [1.3, -1.6], [-1.3, -3], [1.3, -3]].forEach(([wx, wz]) => {
+    const r = malla(new THREE.CylinderGeometry(0.6, 0.6, 0.5, 18), negro, wx, 0.6, wz);
+    r.rotation.z = Math.PI / 2; g.add(r);
+  });
+  g.position.set(x, 0, z); g.rotation.y = rotY;
+  escena.add(g);
+  g.userData.tambor = tambor;
+  return g;
+}
+
+export function casa(escena, x, z, w = 8, h = 6, d = 7, color = 0xe9b96e) {
+  const g = new THREE.Group();
+  g.add(malla(new THREE.BoxGeometry(w, h, d), toon(color), 0, h / 2, 0));
+  g.add(malla(new THREE.BoxGeometry(w + 0.6, 0.5, d + 0.6), toon(0x9c4b3a), 0, h + 0.25, 0));
+  const vidrio = sinContorno(toon(0x8fd0ff)), marco = toon(0xffffff);
+  for (let i = 0; i < Math.floor(w / 2.6); i++) {
+    const wx = -w / 2 + 1.6 + i * 2.6;
+    for (let piso = 0; piso < Math.floor(h / 3); piso++) {
+      g.add(malla(new THREE.BoxGeometry(1.3, 1.4, 0.2), marco, wx, 1.8 + piso * 3, d / 2 + 0.02, false));
+      g.add(malla(new THREE.BoxGeometry(1.0, 1.1, 0.25), vidrio, wx, 1.8 + piso * 3, d / 2 + 0.05, false));
+    }
+  }
+  g.position.set(x, 0, z);
+  escena.add(g);
+  return g;
+}
+
+export function tanqueAgua(escena, x, z) {
+  const g = new THREE.Group(), madera = toon(0xa0643a), metal = toon(0x6a6a72);
+  [[-2, -2], [2, -2], [-2, 2], [2, 2]].forEach(([a, b]) => g.add(malla(new THREE.CylinderGeometry(0.25, 0.3, 10, 8), madera, a, 5, b)));
+  g.add(malla(new THREE.CylinderGeometry(3.2, 3.2, 4.5, 20), madera, 0, 12, 0));
+  g.add(malla(new THREE.ConeGeometry(3.6, 2.2, 20), metal, 0, 15.3, 0));
+  g.position.set(x, 0, z); escena.add(g); return g;
+}
+
+export function poste(escena, x, z) {
+  const madera = toon(0x7a5232);
+  escena.add(malla(new THREE.CylinderGeometry(0.22, 0.28, 11, 8), madera, x, 5.5, z));
+  escena.add(malla(new THREE.BoxGeometry(3, 0.25, 0.25), madera, x, 10.3, z));
+}
+
+export function valla(escena, x, z, rotY = 0) {
+  const g = new THREE.Group();
+  const rayas = toon(0xffffff), naranja = toon(0xff6a1a), patas = toon(0x444448);
+  g.add(malla(new THREE.BoxGeometry(3, 0.5, 0.15), naranja, 0, 1.6, 0));
+  for (let i = 0; i < 3; i++) g.add(malla(new THREE.BoxGeometry(0.35, 0.52, 0.17), rayas, -1 + i, 1.6, 0, false));
+  [-1.3, 1.3].forEach(px => g.add(malla(new THREE.BoxGeometry(0.15, 1.8, 0.6), patas, px, 0.9, 0)));
+  g.position.set(x, 0, z); g.rotation.y = rotY; escena.add(g); return g;
 }
