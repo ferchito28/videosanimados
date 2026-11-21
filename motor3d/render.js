@@ -9,8 +9,10 @@ const { spawn } = require('child_process');
 const { chromium } = require('playwright');
 
 const RAIZ = path.resolve(__dirname, '..');
-const [pagina, salida, fpsTxt] = process.argv.slice(2);
+const [pagina, salida, fpsTxt, extra] = process.argv.slice(2);
 const FPS = parseInt(fpsTxt || '30', 10);
+// --cuadros=1.5,3.2 → guarda solo esos cuadros como JPG (para revisar rápido)
+const SOLO = extra && extra.startsWith('--cuadros=') ? extra.slice(10).split(',').map(Number) : null;
 
 const TIPOS = { '.html': 'text/html', '.js': 'text/javascript', '.ttf': 'font/ttf', '.json': 'application/json' };
 
@@ -33,6 +35,15 @@ const servidor = http.createServer((req, res) => {
   await page.evaluate(() => window.listo);
   const duracion = await page.evaluate(() => window.DURACION);
   const n = Math.round(duracion * FPS);
+  if (SOLO) {
+    fs.mkdirSync(salida, { recursive: true });
+    for (const t of SOLO) {
+      const url = await page.evaluate(x => window.cuadro(x), t);
+      fs.writeFileSync(path.join(salida, `cuadro_${t.toFixed(2)}.jpg`), Buffer.from(url.split(',')[1], 'base64'));
+    }
+    console.log(`  ${SOLO.length} cuadros guardados en ${salida}`);
+    await navegador.close(); servidor.close(); return;
+  }
 
   fs.mkdirSync(path.dirname(path.resolve(salida)), { recursive: true });
   const ff = spawn('ffmpeg', ['-y', '-loglevel', 'error', '-f', 'image2pipe', '-framerate', String(FPS),

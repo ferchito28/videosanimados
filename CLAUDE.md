@@ -53,6 +53,32 @@ problema, solución rara, dato final que sorprende). Ejemplo: `escenas/juntas_co
    Con la voz: `python generar.py juntas_concreto --voz audio.mp3`
    (detecta las pausas de la voz y acomoda subtítulos y escenas).
 
+## Versión 3D (el estilo que más le gusta al usuario)
+
+Personajes 2D de cabeza blanca (diseño propio: obrero, jefe, ingeniero, chofer)
+dentro de escenarios 3D estilo caricatura, cortes cada 1-2 s, subtítulos de 1-2
+palabras al 60% de la altura. Inspirado en canales tipo "AI with CB", pero **no
+copies sus personajes ni sus guiones**.
+
+```bash
+cd motor3d && npm install && cd ..                              # una vez (three.js)
+python generar3d.py juntas_concreto --voz salida/voces/concreto.mp3
+python generar3d.py juntas_concreto --voz ... --cuadros 2,10.5  # revisar cuadros sueltos
+```
+
+- `motor3d/kit.js`: render toon con contorno, cielo/ambientes (dia, calor, noche),
+  desierto, utilería (mezcladora, casas, postes, vallas, autos, yunque, foco),
+  polvo, grietas, flechas, `letrero` (texto de cómic) y subtítulos.
+- `motor3d/personaje2d.js`: `new Personaje2D('obrero'|'jefe'|'ingeniero'|'chofer', alto)`,
+  `actualizar(t, camara, {cara, habla, brazos:[izq,der], codos, tiembla, salto, camina})`.
+- `motor3d/escenas/<video>.html`: cada escenario vive en su propia x del mundo;
+  `FRASES` define por frase el ambiente, las tomas de cámara, `act` (animación),
+  `pj` (personajes) y `over` (letreros). Los tiempos los manda `generar3d.py`
+  (misma `Frase` de `escenas/<video>.py`, alineada con la voz).
+- Un video de 60 s tarda ~12 min. Revisa primero con `--cuadros`.
+- La pantalla es vertical: el campo de visión horizontal es angosto, aleja la
+  cámara para que quepan los objetos.
+
 ## Piezas del motor (`motor/`)
 
 - `stickman.py`: `Pose` (ángulos: 0 = abajo, 90 = adelante, 180 = arriba;

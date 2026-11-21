@@ -53,7 +53,8 @@ export function malla(geo, mat, x = 0, y = 0, z = 0, sombra = true) {
 
 // ----------------------------------------------------------------- mundo
 export function luces(escena, sol = [40, 60, 20]) {
-  escena.add(new THREE.HemisphereLight(0xcfe8ff, 0xf0a060, 1.3));
+  const hemi = new THREE.HemisphereLight(0xcfe8ff, 0xf0a060, 1.3);
+  escena.add(hemi);
   const luz = new THREE.DirectionalLight(0xffffff, 2.2);
   luz.position.set(...sol);
   luz.castShadow = true;
@@ -61,7 +62,9 @@ export function luces(escena, sol = [40, 60, 20]) {
   const c = luz.shadow.camera;
   c.left = -60; c.right = 60; c.top = 60; c.bottom = -60; c.near = 1; c.far = 250;
   luz.shadow.bias = -0.0005;
-  escena.add(luz);
+  escena.add(luz, luz.target);
+  luz.userData.hemi = hemi;
+  luz.userData.offset = new THREE.Vector3(...sol);
   return luz;
 }
 
@@ -317,4 +320,138 @@ export function valla(escena, x, z, rotY = 0) {
   for (let i = 0; i < 3; i++) g.add(malla(new THREE.BoxGeometry(0.35, 0.52, 0.17), rayas, -1 + i, 1.6, 0, false));
   [-1.3, 1.3].forEach(px => g.add(malla(new THREE.BoxGeometry(0.15, 1.8, 0.6), patas, px, 0.9, 0)));
   g.position.set(x, 0, z); g.rotation.y = rotY; escena.add(g); return g;
+}
+
+// ------------------------------------------------- letreros en pantalla
+// Texto de cómic que aparece con rebote. x, y en fracción de pantalla (0-1).
+export function letrero(ctx, txt, x, y, prog, { tam = 170, color = AMARILLO, giro = -0.12 } = {}) {
+  if (prog <= 0) return;
+  const k = rebote(Math.min(1, prog * 2.2));
+  if (k <= 0.02) return;
+  ctx.save();
+  ctx.translate(x * ANCHO, y * ALTO);
+  ctx.rotate(giro);
+  ctx.scale(k, k);
+  ctx.font = `${tam}px Anton`;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
+  const blanco = color.toLowerCase() === '#ffffff';
+  ctx.lineWidth = tam * (blanco ? 0.16 : 0.22); ctx.strokeStyle = '#1b1210'; ctx.strokeText(txt, 0, 0);
+  if (!blanco) { ctx.lineWidth = tam * 0.1; ctx.strokeStyle = '#ffffff'; ctx.strokeText(txt, 0, 0); }
+  ctx.fillStyle = color; ctx.fillText(txt, 0, 0);
+  ctx.restore();
+}
+
+export function destello(ctx, fuerza, color = '255,255,255') {
+  if (fuerza <= 0) return;
+  ctx.fillStyle = `rgba(${color},${Math.min(1, fuerza)})`;
+  ctx.fillRect(0, 0, ANCHO, ALTO);
+}
+
+// ----------------------------------------------------------- ambiente
+const AMBIENTES = {
+  dia: { a: '#3f96ea', b: '#ffe0b0', luz: 2.2, hemi: 1.3, cHemi: 0xcfe8ff },
+  calor: { a: '#ff7a3a', b: '#ffd27a', luz: 2.6, hemi: 1.4, cHemi: 0xffd0a0 },
+  noche: { a: '#0b1040', b: '#4a2f7a', luz: 0.45, hemi: 0.55, cHemi: 0x7080ff },
+};
+export function ambiente(mundo, de, a = de, k = 0) {
+  const A = AMBIENTES[de], B = AMBIENTES[a];
+  mundo.cielo.material.uniforms.a.value.set(A.a).lerp(new THREE.Color(B.a), k);
+  mundo.cielo.material.uniforms.b.value.set(A.b).lerp(new THREE.Color(B.b), k);
+  mundo.luz.intensity = A.luz + (B.luz - A.luz) * k;
+  mundo.hemi.intensity = A.hemi + (B.hemi - A.hemi) * k;
+  mundo.hemi.color.set(A.cHemi).lerp(new THREE.Color(B.cHemi), k);
+}
+
+// ---------------------------------------------------------- más utilería
+export function flecha3d(color = 0xffd600) {
+  const g = new THREE.Group(), mat = toon(color);
+  const palo = malla(new THREE.CylinderGeometry(0.25, 0.25, 2.2, 12), mat, 0, 1.1, 0);
+  const punta = malla(new THREE.ConeGeometry(0.6, 1.1, 16), mat, 0, 2.7, 0);
+  g.add(palo, punta);
+  return g;  // apunta hacia +Y; rótala para orientarla
+}
+
+export function auto3d(color = 0xd9483b) {
+  const g = new THREE.Group();
+  const c = toon(color), vidrio = sinContorno(toon(0x9fd3ff)), negro = toon(0x222226), luzT = sinContorno(toon(0xff4040));
+  g.add(malla(new THREE.BoxGeometry(2.6, 1.0, 5.2), c, 0, 1.0, 0));
+  g.add(malla(new THREE.BoxGeometry(2.3, 0.9, 2.8), c, 0, 1.9, -0.3));
+  g.add(malla(new THREE.BoxGeometry(2.0, 0.65, 0.1), vidrio, 0, 1.95, 1.12, false));
+  g.add(malla(new THREE.BoxGeometry(2.0, 0.65, 0.1), vidrio, 0, 1.95, -1.72, false));
+  [[-0.9, -2.62], [0.9, -2.62]].forEach(([x, z]) => g.add(malla(new THREE.BoxGeometry(0.5, 0.3, 0.1), luzT, x, 1.2, z, false)));
+  [[-1.3, 1.7], [1.3, 1.7], [-1.3, -1.7], [1.3, -1.7]].forEach(([x, z]) => {
+    const r = malla(new THREE.CylinderGeometry(0.55, 0.55, 0.45, 18), negro, x, 0.55, z);
+    r.rotation.z = Math.PI / 2; g.add(r);
+  });
+  return g;
+}
+
+export function yunque() {
+  const g = new THREE.Group(), m = toon(0x4a4a55);
+  g.add(malla(new THREE.BoxGeometry(3.2, 0.7, 1.8), m, 0, 0.35, 0));
+  g.add(malla(new THREE.BoxGeometry(1.4, 1.0, 1.2), m, 0, 1.2, 0));
+  g.add(malla(new THREE.BoxGeometry(4.2, 0.9, 1.6), m, 0.4, 2.1, 0));
+  const pico = malla(new THREE.ConeGeometry(0.75, 1.6, 4), m, -2.3, 2.1, 0);
+  pico.rotation.z = Math.PI / 2; g.add(pico);
+  return g;
+}
+
+export function foco() {
+  const g = new THREE.Group();
+  g.add(malla(new THREE.SphereGeometry(0.8, 24, 16), toon(0xfff27a, { emissive: 0xffc800, emissiveIntensity: 0.8 }), 0, 1.1, 0));
+  g.add(malla(new THREE.CylinderGeometry(0.38, 0.38, 0.6, 16), toon(0x9a9aa4), 0, 0.2, 0));
+  return g;
+}
+
+// Nubecitas de polvo: devuelve una función actualizar(progreso)
+export function polvo(escena, x, y, z, n = 10, radio = 4, color = 0xf3e6d0) {
+  const mat = sinContorno(toon(color));
+  const piezas = [];
+  for (let i = 0; i < n; i++) {
+    const m = malla(new THREE.SphereGeometry(0.8, 12, 8), mat, x, y, z, false);
+    const a = (i / n) * Math.PI * 2 + i * 0.7;
+    m.userData.dir = [Math.cos(a), 0.25 + (i % 3) * 0.15, Math.sin(a)];
+    m.visible = false; escena.add(m); piezas.push(m);
+  }
+  return p => piezas.forEach(m => {
+    m.visible = p > 0 && p < 1;
+    if (!m.visible) return;
+    const d = m.userData.dir, f = frena(p) * radio;
+    m.position.set(x + d[0] * f, y + d[1] * f, z + d[2] * f);
+    m.scale.setScalar((1 - p) * 1.4 + 0.1);
+  });
+}
+
+// Grieta como cadena de piezas delgadas; se revela con progreso 0-1
+export function grieta(escena, puntos, grosor = 0.18, alto = 0.06, color = 0x2b2522) {
+  const mat = sinContorno(toon(color));
+  const piezas = [];
+  for (let i = 0; i < puntos.length - 1; i++) {
+    const a = new THREE.Vector3(...puntos[i]), b = new THREE.Vector3(...puntos[i + 1]);
+    const largo = a.distanceTo(b);
+    const m = malla(new THREE.BoxGeometry(grosor, alto, largo + grosor), mat, 0, 0, 0, false);
+    m.position.copy(a).add(b).multiplyScalar(0.5);
+    m.lookAt(b);
+    m.visible = false; escena.add(m); piezas.push(m);
+  }
+  return p => piezas.forEach((m, i) => { m.visible = i < Math.floor(piezas.length * Math.min(1, p) + 1e-6); });
+}
+
+export function camino(a, b, seg = 12, desvio = 0.6, semilla = 1, eje = 'y') {
+  let s = semilla * 9301 + 49297;
+  const rnd = () => { s = (s * 9301 + 49297) % 233280; return s / 233280; };
+  const pts = [];
+  for (let i = 0; i <= seg; i++) {
+    const k = i / seg;
+    const p = a.map((v, j) => v + (b[j] - v) * k);
+    if (i > 0 && i < seg) {
+      const d = (rnd() * 2 - 1) * desvio;
+      if (eje === 'y') { // grieta sobre una superficie horizontal: desvía en el plano xz
+        const dx = b[2] - a[2], dz = -(b[0] - a[0]), n = Math.hypot(dx, dz) || 1;
+        p[0] += dx / n * d; p[2] += dz / n * d;
+      } else { p[0] += d; } // grieta vertical: desvía en x
+    }
+    pts.push(p);
+  }
+  return pts;
 }

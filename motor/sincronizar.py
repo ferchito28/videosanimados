@@ -73,31 +73,21 @@ def _silencios(ruta, min_silencio=0.14):
     return ini_voz, fin_voz, gaps, len(x) / sr
 
 
-def desde_audio(palabras, ruta):
-    """Tiempos (inicio, fin) de cada palabra, alineados con la voz grabada."""
-    ini, fin, gaps, total = _silencios(ruta)
-    est = estimar(palabras, inicio=0.0)
-    escala = (fin - ini) / max(1e-6, est[-1][1])
-    # pausas del texto: (índice de palabra, tiempo esperado, importancia)
-    cortes = []
-    for i, p in enumerate(palabras[:-1]):
-        pz = pausa_despues(p)
-        if pz > 0:
-            cortes.append((i, ini + est[i][1] * escala, 1.0 if pz >= 0.4 else 0.5))
-    # emparejar pausas del texto con silencios del audio (programación dinámica)
+def _emparejar(cortes, gaps, pen_pausa=0.6, pen_silencio=0.5):
+    """Empareja pausas del texto [(índice, tiempo esperado, peso)] con silencios
+    [(inicio, fin)] respetando el orden (programación dinámica)."""
     B, G = len(cortes), len(gaps)
-    INF = 1e9
-    costo = np.full((B + 1, G + 1), INF)
+    costo = np.full((B + 1, G + 1), 1e9)
     paso = np.zeros((B + 1, G + 1), dtype=int)
-    costo[0, :] = np.arange(G + 1) * 0.05
+    costo[0, :] = [sum(0.05 + pen_silencio * (g[1] - g[0]) for g in gaps[:j]) for j in range(G + 1)]
     for b in range(1, B + 1):
-        costo[b, 0] = costo[b - 1, 0] + cortes[b - 1][2] * 0.6
+        costo[b, 0] = costo[b - 1, 0] + cortes[b - 1][2] * pen_pausa
         for g in range(1, G + 1):
             mid = (gaps[g - 1][0] + gaps[g - 1][1]) / 2
             opciones = (
-                costo[b - 1, g - 1] + abs(cortes[b - 1][1] - mid),          # emparejar
-                costo[b - 1, g] + cortes[b - 1][2] * 0.6,                    # pausa sin silencio
-                costo[b, g - 1] + 0.05 + 0.3 * (gaps[g - 1][1] - gaps[g - 1][0]),  # silencio extra
+                costo[b - 1, g - 1] + abs(cortes[b - 1][1] - mid),                 # emparejar
+                costo[b - 1, g] + cortes[b - 1][2] * pen_pausa,                     # pausa sin silencio
+                costo[b, g - 1] + 0.05 + pen_silencio * (gaps[g - 1][1] - gaps[g - 1][0]),  # silencio de más
             )
             k = int(np.argmin(opciones))
             costo[b, g], paso[b, g] = opciones[k], k
@@ -111,6 +101,37 @@ def desde_audio(palabras, ruta):
             b -= 1
         else:
             g -= 1
+    return pares
+
+
+def desde_audio(palabras, ruta):
+    """Tiempos (inicio, fin) de cada palabra, alineados con la voz grabada."""
+    ini, fin, gaps, total = _silencios(ruta)
+    est = estimar(palabras, inicio=0.0)
+    fuertes = [i for i, p in enumerate(palabras[:-1]) if pausa_despues(p) >= 0.4]
+    debiles = [i for i, p in enumerate(palabras[:-1]) if 0 < pausa_despues(p) < 0.4]
+
+    def esperado(i, i0, t0, i1, t1):
+        """Tiempo esperado del final de la palabra i, repartiendo [t0, t1] entre i0..i1."""
+        base = est[i0][0]
+        total_est = max(1e-6, est[i1][1] - base)
+        return t0 + (est[i][1] - base) / total_est * (t1 - t0)
+
+    # 1) pausas largas (fin de oración, "...", "¡crac!") ↔ silencios largos
+    largos = [g for g in gaps if g[1] - g[0] >= 0.35]
+    pares = _emparejar([(i, esperado(i, 0, ini, len(palabras) - 1, fin), 1.0) for i in fuertes], largos,
+                        pen_pausa=2.5, pen_silencio=4.0)
+    # 2) comas dentro de cada tramo ↔ los silencios que quedan en ese tramo
+    anclas = [(-1, ini)] + [(i, pares[i][1]) for i in sorted(pares)] + [(len(palabras) - 1, fin)]
+    usados = set(pares.values())
+    for (a, ta), (b, tb) in zip(anclas, anclas[1:]):
+        if b - a < 2:
+            continue
+        fin_b = pares[b][0] if b in pares else fin
+        cortes = [(i, esperado(i, a + 1, ta, b, fin_b), 0.5) for i in debiles if a < i < b]
+        libres = [g for g in gaps if g not in usados and ta <= g[0] and g[1] <= fin_b]
+        if cortes and libres:
+            pares.update(_emparejar(cortes, libres))
     # anclas: tramos de palabras entre pausas emparejadas
     anclas = [(-1, None, ini)]
     for i in sorted(pares):
