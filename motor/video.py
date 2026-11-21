@@ -1,0 +1,70 @@
+"""Convierte una escena en un video MP4 vertical (1080x1920) con sonido."""
+import os
+import subprocess
+import tempfile
+import time
+
+from .lienzo import ALTO, ANCHO, Lienzo
+from .sonidos import crear_pista
+
+
+class Escena:
+    """Base para todas las escenas. Una escena nueva solo necesita:
+    - nombre, titulo y duracion (segundos)
+    - sonidos: lista de (segundo, "nombre")
+    - dibujar(lz, t): dibuja el cuadro del segundo t usando el lienzo `lz`
+    """
+    nombre = "escena"
+    titulo = ""
+    duracion = 10.0
+    sonidos = []
+
+    def dibujar(self, lz: Lienzo, t: float):
+        raise NotImplementedError
+
+
+def renderizar(escena: Escena, salida: str, estilo="pop", fps=30, sonido=True,
+               calidad="normal"):
+    lz = Lienzo(estilo)
+    n = int(round(escena.duracion * fps))
+    os.makedirs(os.path.dirname(os.path.abspath(salida)), exist_ok=True)
+
+    with tempfile.TemporaryDirectory() as tmp:
+        cmd = ["ffmpeg", "-y", "-loglevel", "error",
+               "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{ANCHO}x{ALTO}",
+               "-r", str(fps), "-i", "-"]
+        if sonido and escena.sonidos:
+            wav = os.path.join(tmp, "audio.wav")
+            crear_pista(escena.sonidos, escena.duracion, wav)
+            cmd += ["-i", wav, "-c:a", "aac", "-b:a", "160k"]
+        preset = "slow" if calidad == "alta" else "veryfast"
+        cmd += ["-c:v", "libx264", "-preset", preset, "-crf", "20",
+                "-pix_fmt", "yuv420p", "-movflags", "+faststart",
+                "-t", f"{escena.duracion:.3f}", salida]
+
+        inicio = time.time()
+        proc = subprocess.Popen(cmd, stdin=subprocess.PIPE)
+        try:
+            for i in range(n):
+                t = i / fps
+                lz.nuevo_cuadro(t)
+                escena.dibujar(lz, t)
+                proc.stdin.write(lz.terminar().tobytes())
+                if i % fps == 0:
+                    print(f"\r  cuadro {i}/{n}", end="", flush=True)
+        finally:
+            proc.stdin.close()
+            proc.wait()
+        if proc.returncode != 0:
+            raise RuntimeError("ffmpeg no pudo crear el video")
+        print(f"\r  listo: {n} cuadros en {time.time() - inicio:.1f} s → {salida}")
+    return salida
+
+
+def captura(escena: Escena, t: float, salida: str, estilo="pop"):
+    """Guarda un solo cuadro como PNG (para revisar rápido una pose)."""
+    lz = Lienzo(estilo)
+    lz.nuevo_cuadro(t)
+    escena.dibujar(lz, t)
+    lz.terminar().save(salida)
+    return salida
