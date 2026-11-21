@@ -311,7 +311,7 @@ class Lienzo:
                         stroke_width=int(tam_real * 0.11 * SS),
                         stroke_fill=borde or self.e["texto_borde"])
 
-    def onomatopeya(self, txt, x, y, progreso, tam=170, giro=-8, color=None):
+    def onomatopeya(self, txt, x, y, progreso, tam=170, giro=-8, color=None, borde=(255, 255, 255)):
         """Texto de cómic (¡PUM!, ¡BONK!) que aparece de golpe en (x, y) del mundo."""
         if not 0 < progreso < 1.6:
             return
@@ -327,7 +327,7 @@ class Lienzo:
         capa = Image.new("RGBA", (w, h), (0, 0, 0, 0))
         ImageDraw.Draw(capa).text((w / 2, h / 2), txt, font=f, anchor="mm",
                                   fill=color or self.e["acento"],
-                                  stroke_width=int(tam_px * 0.12), stroke_fill=(255, 255, 255))
+                                  stroke_width=int(tam_px * 0.12), stroke_fill=borde)
         capa = capa.rotate(giro, expand=True, resample=Image.BICUBIC)
         sx, sy = self.p(x, y)
         self.img.paste(capa, (int(sx - capa.width / 2), int(sy - capa.height / 2)), capa)

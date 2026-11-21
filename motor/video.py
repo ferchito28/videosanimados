@@ -33,10 +33,25 @@ def renderizar(escena: Escena, salida: str, estilo="pop", fps=30, sonido=True,
         cmd = ["ffmpeg", "-y", "-loglevel", "error",
                "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{ANCHO}x{ALTO}",
                "-r", str(fps), "-i", "-"]
-        if sonido and escena.sonidos:
-            wav = os.path.join(tmp, "audio.wav")
-            crear_pista(escena.sonidos, escena.duracion, wav)
-            cmd += ["-i", wav, "-c:a", "aac", "-b:a", "160k"]
+        voz = getattr(escena, "voz", None)
+        if sonido and (escena.sonidos or voz):
+            entradas = []
+            if voz:
+                cmd += ["-i", voz]
+                entradas.append("[1:a]volume=1.0[a1]")
+            if escena.sonidos:
+                wav = os.path.join(tmp, "audio.wav")
+                crear_pista(escena.sonidos, escena.duracion, wav)
+                cmd += ["-i", wav]
+                n_in = 2 if voz else 1
+                vol = 0.35 if voz else 1.0
+                entradas.append(f"[{n_in}:a]volume={vol}[a{n_in}]")
+            if voz and escena.sonidos:
+                filtro = ";".join(entradas) + ";[a1][a2]amix=inputs=2:normalize=0:duration=longest[a]"
+            else:
+                filtro = entradas[0].rsplit("[", 1)[0] + "[a]"
+            cmd += ["-filter_complex", filtro, "-map", "0:v", "-map", "[a]",
+                    "-c:a", "aac", "-b:a", "192k"]
         preset = "slow" if calidad == "alta" else "veryfast"
         cmd += ["-c:v", "libx264", "-preset", preset, "-crf", "20",
                 "-pix_fmt", "yuv420p", "-movflags", "+faststart",

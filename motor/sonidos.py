@@ -81,8 +81,32 @@ def tada():
     return s * np.minimum(1, t * 40) * np.exp(-t * 3) * 0.6
 
 
+def whoosh_suave():
+    return whoosh()[: int(SR * 0.35)] * 0.35
+
+
+def tac():
+    t = _t(0.12)
+    tono = np.sin(2 * np.pi * 180 * t) * np.exp(-t * 45)
+    return (tono + _paso_bajo(_ruido(len(t), 5), 3) * np.exp(-t * 90) * 0.5) * 0.8
+
+
+def crac():
+    partes = []
+    rng = np.random.default_rng(9)
+    for i in range(6):
+        t = _t(0.04 + rng.random() * 0.03)
+        partes.append(_ruido(len(t), 10 + i) * np.exp(-t * 60) * (0.9 - i * 0.1))
+    return np.concatenate(partes)
+
+
+def ding():
+    t = _t(0.6)
+    return (np.sin(2 * np.pi * 1320 * t) + 0.5 * np.sin(2 * np.pi * 1980 * t)) * np.exp(-t * 6) * 0.35
+
+
 SONIDOS = {f.__name__: f for f in (golpe, golpecito, whoosh, boing, paso, resbalon,
-                                    pop, estrellas, tada)}
+                                    pop, estrellas, tada, whoosh_suave, tac, crac, ding)}
 
 
 def crear_pista(eventos, duracion, ruta):

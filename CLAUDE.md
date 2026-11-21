@@ -32,6 +32,27 @@ en su celular.
    `--captura` y míralos (posturas raras, cosas fuera de cuadro, textos tapados).
 4. Genera el MP4 y mándalo.
 
+## Videos explicativos "¿Por qué...?" con narrador (~55-60 s)
+
+Es el formato favorito del usuario (estilo curiosidades: pregunta gancho,
+problema, solución rara, dato final que sorprende). Ejemplo: `escenas/juntas_concreto.py`.
+
+1. Escribe el guion: frases cortas, tono de narrador con humor, datos correctos,
+   ~150 palabras. Dáselo al usuario para que genere la voz en **ElevenLabs**
+   (modelo Multilingual v2) y te mande el MP3.
+2. Crea la escena como subclase de `Explicador` con una `Frase` por oración:
+   `Frase(texto, "palabras clave en amarillo", funcion_escena, [(fraccion | "palabra:N", sonido)])`.
+   El texto debe ser **idéntico** al que se grabó.
+3. Cada función de escena recibe `(esc, lz, u, dur, n)`: `u` = segundos desde
+   que empezó la frase, `dur` = duración de la frase. Usa `esc.camara(...)` y
+   `esc.momento_palabra(n, k)` para sincronizar un efecto con una palabra.
+   Personajes: `cabezon(lz, x, y_pies, "obrero"|"jefe"|"ingeniero"|"chofer", cara=..., brazos=...)`.
+   Los subtítulos (1-2 palabras, clave en amarillo) salen solos en y=880:
+   deja libre esa franja de caras y letreros.
+4. Vista previa sin voz: `python generar.py juntas_concreto`.
+   Con la voz: `python generar.py juntas_concreto --voz audio.mp3`
+   (detecta las pausas de la voz y acomoda subtítulos y escenas).
+
 ## Piezas del motor (`motor/`)
 
 - `stickman.py`: `Pose` (ángulos: 0 = abajo, 90 = adelante, 180 = arriba;

@@ -27,6 +27,8 @@ def main():
     ap.add_argument("--sin-sonido", action="store_true")
     ap.add_argument("--alta-calidad", action="store_true", help="archivo más ligero, tarda más")
     ap.add_argument("--salida", default="salida", help="carpeta donde se guardan")
+    ap.add_argument("--voz", metavar="AUDIO",
+                    help="audio del narrador (MP3 de ElevenLabs) para videos explicativos")
     ap.add_argument("--captura", type=float, metavar="SEGUNDO",
                     help="guarda solo el cuadro de ese segundo como PNG")
     a = ap.parse_args()
@@ -42,7 +44,11 @@ def main():
     for n in nombres:
         if n not in ESCENAS:
             sys.exit(f"No existe la escena '{n}'. Usa --lista para ver las opciones.")
-        escena = ESCENAS[n]()
+        clase = ESCENAS[n]
+        if a.voz and getattr(clase, "frases", None):
+            escena = clase(voz=a.voz)
+        else:
+            escena = clase()
         if a.captura is not None:
             ruta = os.path.join(a.salida, f"{n}_{a.estilo}_{a.captura:.2f}s.png")
             os.makedirs(a.salida, exist_ok=True)
