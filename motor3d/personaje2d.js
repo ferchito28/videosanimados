@@ -292,6 +292,78 @@ function dibujar(ctx, v, tipo, est, t) {
   ctx.restore();
 }
 
+// En la cama: canvas horizontal (1024x512). est.inclina: 0 = acostado, 1 = sentado.
+const CW = 1024, CH = 512;
+function dibujarCama(ctx, v, tipo, est, t) {
+  ctx.clearRect(0, 0, CW, CH);
+  const k = est.inclina ?? 0;
+  const respira = Math.sin(t * 2.2) * 6 * (1 - k);
+  // almohada
+  // almohada: acostado queda bajo la cabeza; sentado, atrás de la espalda
+  const ax = 175 + k * 230, ay = 400 - k * 150, rx = 140 - k * 40, ry = 58 + k * 40;
+  ctx.beginPath(); ctx.ellipse(ax, ay, rx, ry, -0.05 - k * 0.3, 0, Math.PI * 2);
+  ctx.fillStyle = '#f2f2f6'; ctx.fill(); contorno(ctx, 9); ctx.stroke();
+  // cuerpo de la cintura para arriba, girando sobre la cadera
+  const hx = 440, hy = 420;
+  ctx.save();
+  ctx.translate(hx, hy + respira * 0.3); ctx.rotate(-(1 - k) * Math.PI / 2 * 0.98); ctx.scale(0.6, 0.6); ctx.translate(-256, -730);
+  const ropa = v.saco || v.camisa;
+  const [bi, bd] = est.brazos || [15, 15];
+  brazo(ctx, -1, bi, est.codos ? est.codos[0] : 10, ropa);
+  cuerpo(ctx, v, tipo);
+  brazo(ctx, 1, bd, est.codos ? est.codos[1] : 10, ropa);
+  if (v.pelo) { elipse(ctx, 96, 320, 40, 60, v.pelo, 8); elipse(ctx, 416, 320, 40, 60, v.pelo, 8); }
+  elipse(ctx, 256, 300, 172, 160, '#ffffff', 12);
+  cara(ctx, v, est, t);
+  sombrero(ctx, v);
+  ctx.restore();
+  // cobija: tapa las piernas y, acostado, también el pecho
+  const izq = 330 + k * 200;
+  const arriba = hy - 95 + k * 30 - respira;
+  ctx.beginPath(); ctx.moveTo(izq, CH - 20); ctx.lineTo(izq - 20, arriba + 30);
+  ctx.quadraticCurveTo(izq + 40, arriba - 20, izq + 200, arriba); ctx.quadraticCurveTo(700, arriba + 10, 820, arriba + 35);
+  ctx.quadraticCurveTo(960, arriba + 20, 1000, arriba + 70); ctx.lineTo(1010, CH - 20); ctx.closePath();
+  ctx.fillStyle = est.cobija || '#2d6fd6'; ctx.fill();
+  ctx.save(); ctx.clip();
+  ctx.fillStyle = '#ffd600'; for (let x = izq + 60; x < 1010; x += 120) ctx.fillRect(x, 0, 26, CH);
+  ctx.fillStyle = '#f4f4f4'; ctx.fillRect(0, arriba - 10, CW, 46);        // doblez blanco de la sábana
+  ctx.restore();
+  contorno(ctx, 11); ctx.stroke();
+  if (est.zzz) {
+    ctx.font = '110px Anton'; ctx.textAlign = 'center'; ctx.lineJoin = 'round';
+    [0, 1, 2].forEach(i => {
+      const q = (t * 0.8 + i / 3) % 1, x = 330 + q * 160, y = 220 - q * 190, tam = 0.5 + q * 0.6;
+      ctx.save(); ctx.translate(x, y); ctx.scale(tam, tam); ctx.globalAlpha = 1 - q * 0.6;
+      ctx.lineWidth = 14; ctx.strokeStyle = LINEA; ctx.strokeText('Z', 0, 0); ctx.fillStyle = '#ffffff'; ctx.fillText('Z', 0, 0);
+      ctx.restore();
+    });
+  }
+}
+
+// Personaje acostado o sentado en la cama (no atraviesa la cama: trae su propia almohada y cobija)
+export class PersonajeCama {
+  constructor(tipo = 'dormilon', ancho = 6, calidad = 1) {
+    this.tipo = tipo; this.v = VESTUARIOS[tipo]; this.q = calidad;
+    this.canvas = document.createElement('canvas');
+    this.canvas.width = Math.round(CW * calidad); this.canvas.height = Math.round(CH * calidad);
+    this.ctx = this.canvas.getContext('2d');
+    this.tex = new THREE.CanvasTexture(this.canvas); this.tex.colorSpace = THREE.SRGBColorSpace;
+    const mat = new THREE.MeshBasicMaterial({ map: this.tex, transparent: true, alphaTest: 0.4, side: THREE.DoubleSide });
+    mat.userData.outlineParameters = { visible: false };
+    mat.color.setScalar(0.9);   // un poquito menos que blanco puro: así el brillo (bloom) no los quema
+    const geo = new THREE.PlaneGeometry(ancho, ancho / 2); geo.translate(0, ancho / 4, 0);
+    this.malla = new THREE.Mesh(geo, mat);
+    this.estado = { cara: 'dormido', inclina: 0, semilla: Math.random() * 10 };
+  }
+  actualizar(t, a = {}, b) {          // acepta (t, cambios) o (t, camara, cambios)
+    const cambios = b || (a && !a.isCamera ? a : {});
+    Object.assign(this.estado, cambios);
+    this.ctx.setTransform(this.q, 0, 0, this.q, 0, 0);
+    dibujarCama(this.ctx, this.v, this.tipo, this.estado, t);
+    this.tex.needsUpdate = true;
+  }
+}
+
 export class Personaje2D {
   // calidad < 1 usa un canvas más chico (para gente de fondo: mucho más rápido)
   constructor(tipo = 'obrero', alto = 4.4, calidad = 1) {
@@ -306,6 +378,7 @@ export class Personaje2D {
     this.tex.anisotropy = 4;
     const mat = new THREE.MeshBasicMaterial({ map: this.tex, transparent: true, alphaTest: 0.4, side: THREE.DoubleSide });
     mat.userData.outlineParameters = { visible: false };
+    mat.color.setScalar(0.9);   // un poquito menos que blanco puro: así el brillo (bloom) no los quema
     const geo = new THREE.PlaneGeometry(alto / 2, alto);
     geo.translate(0, alto / 2, 0);
     this.malla = new THREE.Mesh(geo, mat);
