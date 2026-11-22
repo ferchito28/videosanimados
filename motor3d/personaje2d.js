@@ -15,6 +15,10 @@ export const VESTUARIOS = {
   pasajero: { saco: '#7a5233', camisa: '#ffffff', corbata: '#3b6e3a', sombrero: 'bombin', bigote: true, pelo: '#3a2a22' },
   pasajera: { saco: '#b04f86', vestido: true, sombrero: 'pamela', pelo_largo: '#8a4a2a' },
   marinero: { camisa: '#ffffff', cuello: '#2d4fa8', sombrero: 'marinero', pelo: '#6b4b2a' },
+  dormilon: { camisa: '#8fb8ff', pijama: true, sombrero: 'gorro_dormir', pelo: '#5a3a28' },
+  campesino: { camisa: '#9a6b42', tunica: true, sombrero: 'capucha', pelo: '#5a3a28' },
+  campesina: { saco: '#6f8f4a', vestido: true, delantal: true, sombrero: 'cofia', pelo_largo: '#a0522d' },
+  medico: { camisa: '#ffffff', bata: true, sombrero: null, lentes: true, pelo: '#2b2b2b' },
 };
 
 function contorno(ctx, w = 11) { ctx.lineWidth = w; ctx.strokeStyle = LINEA; ctx.lineJoin = 'round'; ctx.lineCap = 'round'; }
@@ -61,6 +65,17 @@ function cuerpo(ctx, v, tipo) {
   } else if (tipo === 'marinero') {
     ctx.fillStyle = v.cuello; ctx.beginPath(); ctx.moveTo(180, 490); ctx.lineTo(332, 490); ctx.lineTo(256, 600); ctx.fill();
     ctx.fillStyle = '#ffffff'; ctx.fillRect(160, 520, 200, 8);
+  } else if (v.pijama) {
+    ctx.fillStyle = '#ffffff'; for (let y = 480; y < 780; y += 46) ctx.fillRect(130, y, 260, 14);
+    ctx.fillStyle = '#4f7fd6'; [560, 620, 680].forEach(y => { ctx.beginPath(); ctx.arc(256, y, 9, 0, 7); ctx.fill(); });
+  } else if (v.tunica) {
+    ctx.fillStyle = '#6e4a2c'; ctx.fillRect(130, 660, 260, 30);
+    ctx.fillStyle = '#d9c39a'; ctx.beginPath(); ctx.moveTo(226, 490); ctx.lineTo(286, 490); ctx.lineTo(256, 560); ctx.fill();
+  } else if (v.bata) {
+    ctx.fillStyle = '#7fc8b0'; ctx.fillRect(226, 480, 60, 300);
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(130, 480, 96, 300); ctx.fillRect(286, 480, 104, 300);
+    linea(ctx, [[226, 480], [226, 780]], 6); linea(ctx, [[286, 480], [286, 780]], 6);
+    ctx.fillStyle = '#d0d0d0'; ctx.fillRect(296, 580, 50, 40);
   } else if (tipo === 'pasajera') {
     ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(256, 495, 40, 0, Math.PI); ctx.fill();
     ctx.fillStyle = '#7a2f5a'; ctx.fillRect(150, 660, 220, 26);
@@ -70,6 +85,11 @@ function cuerpo(ctx, v, tipo) {
   ctx.moveTo(170, 520); ctx.quadraticCurveTo(256, 470, 342, 520);
   ctx.quadraticCurveTo(372, 640, 345, 735); ctx.quadraticCurveTo(256, 770, 167, 735);
   ctx.quadraticCurveTo(140, 640, 170, 520); ctx.closePath(); ctx.stroke();
+  if (v.bata) {  // estetoscopio
+    ctx.beginPath(); ctx.moveTo(200, 500); ctx.quadraticCurveTo(190, 640, 256, 650); ctx.quadraticCurveTo(320, 640, 312, 500);
+    ctx.lineWidth = 9; ctx.strokeStyle = '#333'; ctx.stroke(); elipse(ctx, 256, 660, 18, 18, '#bbbbbb', 6);
+  }
+  if (v.delantal) { ctx.fillStyle = '#f4f0e6'; ctx.beginPath(); ctx.roundRect(200, 600, 112, 140, 20); ctx.fill(); contorno(ctx, 8); ctx.stroke(); }
   if (tipo === 'jefe') {  // moño
     ctx.fillStyle = v.mono;
     ctx.beginPath(); ctx.moveTo(256, 505); ctx.lineTo(226, 488); ctx.lineTo(226, 522); ctx.closePath(); ctx.fill(); contorno(ctx, 6); ctx.stroke();
@@ -104,7 +124,12 @@ function cara(ctx, v, est, t) {
     const alto = c === 'sorpresa' ? 62 : 46;
     linea(ctx, [[x - 30, y - alto + s * 30], [x + 30, y - alto - s * 30]], 10);
   });
-  if (c === 'feliz' || parpadeo) {
+  if (c === 'dormido') {
+    ojos.forEach(([x, y]) => linea(ctx, [[x - 22, y + 6], [x + 22, y + 6]], 10));
+  } else if (c === 'cansado') {
+    ojos.forEach(([x, y]) => { elipse(ctx, x, y + 6, 13, 9, LINEA, 0); linea(ctx, [[x - 26, y - 4], [x + 26, y - 4]], 9);
+      ctx.beginPath(); ctx.arc(x, y + 18, 20, 0.15 * Math.PI, 0.85 * Math.PI); ctx.lineWidth = 5; ctx.strokeStyle = '#8a7aa8'; ctx.stroke(); });
+  } else if (c === 'feliz' || parpadeo) {
     ojos.forEach(([x, y]) => { ctx.beginPath(); ctx.arc(x, y + 8, 20, Math.PI * 1.1, Math.PI * 1.9); contorno(ctx, 10); ctx.stroke(); });
   } else if (c === 'sorpresa' || c === 'miedo') {
     ojos.forEach(([x, y]) => { elipse(ctx, x, y, 30, 34, '#ffffff', 8); elipse(ctx, x, y + 4, 11, 13, LINEA, 0); });
@@ -120,6 +145,7 @@ function cara(ctx, v, est, t) {
   }
   // boca
   const by = cy + 85;
+  if (c === 'dormido') { elipse(ctx, cx + 10, by, 14, 10, '#5a1b1b', 6); return; }
   const abierta = habla || ['feliz', 'sorpresa', 'miedo', 'calor'].includes(c);
   if (abierta) {
     ctx.beginPath();
@@ -178,6 +204,21 @@ function sombrero(ctx, v) {
   } else if (v.sombrero === 'marinero') {
     ctx.beginPath(); ctx.ellipse(cx, cy - 135, 140, 50, 0, 0, Math.PI * 2); ctx.fillStyle = '#ffffff'; ctx.fill(); contorno(ctx, 11); ctx.stroke();
     ctx.beginPath(); ctx.roundRect(cx - 110, cy - 140, 220, 40, 10); ctx.fillStyle = '#2d4fa8'; ctx.fill(); ctx.stroke();
+  } else if (v.sombrero === 'gorro_dormir') {
+    const cae = Math.sin(Date.now() * 0) * 0;
+    ctx.beginPath(); ctx.moveTo(cx - 160, cy - 95); ctx.quadraticCurveTo(cx - 40, cy - 330, cx + 230, cy - 170 + cae);
+    ctx.quadraticCurveTo(cx + 60, cy - 210, cx + 165, cy - 95); ctx.closePath();
+    ctx.fillStyle = '#8fb8ff'; ctx.fill(); contorno(ctx, 11); ctx.stroke();
+    ctx.beginPath(); ctx.roundRect(cx - 170, cy - 120, 340, 44, 22); ctx.fillStyle = '#ffffff'; ctx.fill(); ctx.stroke();
+    elipse(ctx, cx + 232, cy - 165, 30, 30, '#ffffff', 8);
+  } else if (v.sombrero === 'capucha') {
+    ctx.beginPath(); ctx.moveTo(cx - 185, cy + 60); ctx.quadraticCurveTo(cx - 200, cy - 230, cx, cy - 215);
+    ctx.quadraticCurveTo(cx + 200, cy - 230, cx + 185, cy + 60); ctx.quadraticCurveTo(cx + 150, cy - 120, cx, cy - 150);
+    ctx.quadraticCurveTo(cx - 150, cy - 120, cx - 185, cy + 60); ctx.closePath();
+    ctx.fillStyle = '#7a5233'; ctx.fill(); contorno(ctx, 11); ctx.stroke();
+  } else if (v.sombrero === 'cofia') {
+    ctx.beginPath(); ctx.ellipse(cx, cy - 110, 175, 90, 0, Math.PI, 0); ctx.closePath(); ctx.fillStyle = '#f4f0e6'; ctx.fill(); contorno(ctx, 10); ctx.stroke();
+    for (let i = -3; i <= 3; i++) { ctx.beginPath(); ctx.arc(cx + i * 50, cy - 108, 24, 0, Math.PI); ctx.stroke(); }
   } else if (v.sombrero === 'gorra') {
     ctx.beginPath(); ctx.ellipse(cx, cy - 110, 150, 95, 0, Math.PI, 0); ctx.closePath();
     ctx.fillStyle = v.gorra; ctx.fill(); contorno(ctx, 11); ctx.stroke();
@@ -207,6 +248,20 @@ function dibujar(ctx, v, tipo, est, t) {
   if (v.vestido) falda(ctx, v);
   cuerpo(ctx, v, tipo);
   const mano = brazo(ctx, 1, bd, est.codos ? est.codos[1] : 10, ropa);
+  if (est.objeto === 'vela') {
+    ctx.save(); ctx.translate(mano[0], mano[1] - 20);
+    ctx.fillStyle = '#c9b38a'; ctx.beginPath(); ctx.ellipse(0, 22, 40, 12, 0, 0, 7); ctx.fill(); contorno(ctx, 6); ctx.stroke();
+    ctx.fillStyle = '#fff6dc'; ctx.fillRect(-12, -50, 24, 66); ctx.strokeRect(-12, -50, 24, 66);
+    const f = 1 + Math.sin(t * 20) * 0.12;
+    ctx.fillStyle = 'rgba(255,200,60,0.35)'; ctx.beginPath(); ctx.arc(0, -72, 46 * f, 0, 7); ctx.fill();
+    ctx.fillStyle = '#ffb300'; ctx.beginPath(); ctx.ellipse(0, -70, 12 * f, 22 * f, 0, 0, 7); ctx.fill();
+    ctx.restore();
+  }
+  if (est.objeto === 'celular') {
+    ctx.save(); ctx.translate(mano[0] - 10, mano[1] - 50); ctx.rotate(-0.2);
+    ctx.fillStyle = 'rgba(120,190,255,0.35)'; ctx.beginPath(); ctx.arc(0, 0, 70, 0, 7); ctx.fill();
+    ctx.fillStyle = '#222'; ctx.fillRect(-26, -46, 52, 92); ctx.fillStyle = '#7cc4ff'; ctx.fillRect(-20, -38, 40, 74); ctx.restore();
+  }
   if (est.objeto === 'plano') {
     ctx.save(); ctx.translate(mano[0], mano[1]); ctx.rotate(-0.5);
     ctx.fillStyle = '#4b8fe0'; ctx.fillRect(-14, -90, 28, 120); contorno(ctx, 6); ctx.strokeRect(-14, -90, 28, 120); ctx.restore();
@@ -225,6 +280,15 @@ function dibujar(ctx, v, tipo, est, t) {
   }
   cara(ctx, v, est, t);
   sombrero(ctx, v);
+  if (est.zzz) {  // "Z z z" flotando
+    ctx.font = '90px Anton'; ctx.textAlign = 'center'; ctx.lineJoin = 'round';
+    [0, 1, 2].forEach(i => {
+      const k = (t * 0.8 + i / 3) % 1, x = 380 + k * 90, y = 170 - k * 150, tam = 0.5 + k * 0.6;
+      ctx.save(); ctx.translate(x, y); ctx.scale(tam, tam); ctx.globalAlpha = 1 - k * 0.6;
+      ctx.lineWidth = 14; ctx.strokeStyle = LINEA; ctx.strokeText('Z', 0, 0); ctx.fillStyle = '#ffffff'; ctx.fillText('Z', 0, 0);
+      ctx.restore();
+    });
+  }
   ctx.restore();
 }
 

@@ -206,6 +206,7 @@ export function respirar(p, t) {
 // ----------------------------------------------------------- animación
 export const suave = x => { x = Math.min(1, Math.max(0, x)); return x * x * (3 - 2 * x); };
 export const frena = x => { x = Math.min(1, Math.max(0, x)); return 1 - (1 - x) * (1 - x); };
+export const acelera = x => { x = Math.min(1, Math.max(0, x)); return x * x; };
 export const rebote = x => { x = Math.min(1, Math.max(0, x)); const c1 = 1.70158, c3 = 2.70158; return 1 + c3 * (x - 1) ** 3 + c1 * (x - 1) ** 2; };
 
 // claves: [[t, [x,y,z]], ...] con interpolación suave
@@ -354,6 +355,8 @@ const AMBIENTES = {
   dia: { a: '#3f96ea', b: '#ffe0b0', luz: 2.2, hemi: 1.3, cHemi: 0xcfe8ff },
   calor: { a: '#ff7a3a', b: '#ffd27a', luz: 2.6, hemi: 1.4, cHemi: 0xffd0a0 },
   noche: { a: '#0b1040', b: '#4a2f7a', luz: 0.45, hemi: 0.55, cHemi: 0x7080ff },
+  cuarto: { a: '#0b1040', b: '#4a2f7a', luz: 0.9, hemi: 1.15, cHemi: 0xb0b4ff },
+  sueno: { a: '#2a1a6a', b: '#d07ad8', luz: 1.2, hemi: 1.2, cHemi: 0xd8c8ff },
 };
 export function ambiente(mundo, de, a = de, k = 0) {
   const A = AMBIENTES[de], B = AMBIENTES[a];
