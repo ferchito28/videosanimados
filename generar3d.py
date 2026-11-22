@@ -49,6 +49,7 @@ def main():
     ap.add_argument("--fps", type=int, default=30)
     ap.add_argument("--salida", default="salida")
     ap.add_argument("--cuadros", help="solo guarda estos segundos como imágenes, ej. 2,10.5")
+    ap.add_argument("--sin-subs", action="store_true", help="sin subtítulos (para portadas)")
     a = ap.parse_args()
 
     clase, pagina = VIDEOS[a.video]
@@ -56,7 +57,10 @@ def main():
     os.makedirs(os.path.join(RAIZ, "motor3d", "tmp"), exist_ok=True)
     ruta_json = os.path.join("motor3d", "tmp", f"{a.video}.json")
     with open(os.path.join(RAIZ, ruta_json), "w") as f:
-        json.dump(datos_de(esc), f)
+        datos = datos_de(esc)
+        if a.sin_subs:
+            datos["subs"] = []
+        json.dump(datos, f)
     url = f"{pagina}?datos=/{ruta_json}"
     render = ["node", os.path.join(RAIZ, "motor3d", "render.js"), url]
 
