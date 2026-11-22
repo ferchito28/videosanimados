@@ -1,0 +1,670 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Sal en las calles 3D</title>
+<script type="importmap">
+{ "imports": {
+    "three": "/motor3d/node_modules/three/build/three.module.js",
+    "three/addons/": "/motor3d/node_modules/three/examples/jsm/"
+} }
+</script>
+<style>body{margin:0;background:#000}</style>
+</head>
+<body>
+<script type="module">
+// ¿Por qué le echan sal a las calles cuando va a nevar? — Beto (el listo) contra el vecino presumido.
+import * as THREE from 'three';
+import * as K from '/motor3d/kit.js';
+import { Personaje2D } from '/motor3d/personaje2d.js';
+import * as R from '/motor3d/realista.js';
+
+const datos = await (await fetch(new URLSearchParams(location.search).get('datos'))).json();
+window.DURACION = datos.duracion;
+await K.cargarFuente();
+
+const r = R.crearRenderRealista();
+const { escena, camara } = r;
+const cielo = K.cielo(escena, '#0b1040', '#4a2f7a');
+const luz = K.luces(escena, [35, 55, 25]);
+const mundo = { cielo, luz, hemi: luz.userData.hemi };
+const nocheG = new THREE.Group(); escena.add(nocheG);
+const luna = new THREE.Mesh(new THREE.SphereGeometry(30, 24, 16), K.sinContorno(new THREE.MeshBasicMaterial({ color: 0xfff6d0 })));
+nocheG.add(luna);
+const estrellaMat = K.sinContorno(new THREE.MeshBasicMaterial({ color: 0xffffff }));
+for (let i = 0; i < 160; i++) {
+  const s = new THREE.Mesh(new THREE.SphereGeometry(1.2 + (i % 3) * 0.6, 6, 4), estrellaMat);
+  const a = (i * 137.5) * Math.PI / 180, e = 0.15 + ((i * 53) % 100) / 100 * 0.85;
+  s.position.set(Math.cos(a) * 1000 * Math.cos(e), 1000 * Math.sin(e), -Math.abs(Math.sin(a)) * 1000 * Math.cos(e) - 100);
+  nocheG.add(s);
+}
+const nubes = [K.nube(escena, -80, 120, -500, 2.6), K.nube(escena, 90, 140, -600, 3.0), K.nube(escena, 10, 160, -700, 3.2)];
+const NIEVE_PISO = K.sinContorno(K.toon(0xeef2f8));
+const piso = K.malla(new THREE.PlaneGeometry(5000, 5000), NIEVE_PISO, 0, 0, 0, false); piso.rotation.x = -Math.PI / 2; escena.add(piso);
+
+const caja = (w, h, d, mat, x, y, z, padre = escena) => { const m = K.malla(new THREE.BoxGeometry(w, h, d), mat, x, y, z); padre.add(m); return m; };
+const bola = (rad, mat, x, y, z, padre = escena) => { const m = K.malla(new THREE.SphereGeometry(rad, 14, 10), mat, x, y, z); padre.add(m); return m; };
+const cl = x => Math.min(1, Math.max(0, x));
+const lerp = (a, b, k) => a.map((v, i) => v + (b[i] - v) * k);
+let semilla = 3;
+const azar = () => ((semilla = (semilla * 9301 + 49297) % 233280) / 233280);
+const BLANCO = K.toon(0xf6f8fc);
+
+function pino(padre, x, z, k = 1) {
+  padre.add(K.malla(new THREE.CylinderGeometry(0.25 * k, 0.35 * k, 1.6 * k, 8), K.toon(0x6e4628), x, 0.8 * k, z));
+  [[2.2, 2.6, 2.2], [1.7, 2.2, 3.6], [1.1, 1.8, 4.9]].forEach(([rad, h, y]) => {
+    padre.add(K.malla(new THREE.ConeGeometry(rad * k, h * k, 10), K.toon(0x2f6a46), x, y * k, z));
+    padre.add(K.malla(new THREE.ConeGeometry(rad * 0.75 * k, h * 0.5 * k, 10), BLANCO, x, (y + h * 0.28) * k, z));
+  });
+}
+function monoNieve(padre, x, z, rot = 0) {
+  const g = new THREE.Group(); g.position.set(x, 0, z); g.rotation.y = rot; padre.add(g);
+  bola(1.1, BLANCO, 0, 1.0, 0, g); bola(0.8, BLANCO, 0, 2.5, 0, g); bola(0.55, BLANCO, 0, 3.6, 0, g);
+  const nariz = K.malla(new THREE.ConeGeometry(0.12, 0.6, 8), K.toon(0xff7a1a), 0, 3.6, 0.75); nariz.rotation.x = Math.PI / 2; g.add(nariz);
+  [-0.2, 0.2].forEach(xx => bola(0.07, K.toon(0x1b1210), xx, 3.8, 0.48, g));
+  [2.2, 2.6, 3.0].forEach(y => bola(0.08, K.toon(0x1b1210), 0, y, 0.78, g));
+  caja(0.9, 0.08, 0.9, K.toon(0x1b1210), 0, 4.05, 0, g); caja(0.6, 0.6, 0.6, K.toon(0x1b1210), 0, 4.38, 0, g);
+  const bufa = K.malla(new THREE.TorusGeometry(0.62, 0.16, 8, 20), K.toon(0xe23c3c), 0, 3.1, 0); bufa.rotation.x = Math.PI / 2; g.add(bufa);
+  [-1, 1].forEach(l => { const b = K.malla(new THREE.CylinderGeometry(0.05, 0.05, 1.6, 5), K.toon(0x6e4628), l * 1.2, 2.8, 0); b.rotation.z = l * 1.0; g.add(b); });
+  return g;
+}
+
+// ======================================================== COLONIA NEVADA (x = 0)
+const ventMat = K.sinContorno(new THREE.MeshToonMaterial({ color: 0xffe39a, emissive: 0xc89a30 }));
+const focoMat = K.sinContorno(new THREE.MeshToonMaterial({ color: 0xfff2a0, emissive: 0xffc840 }));
+const COLORES_LUZ = [0xff4040, 0x40ff60, 0x4080ff, 0xffd040, 0xff60ff];
+const lucesNav = COLORES_LUZ.map(c => K.sinContorno(new THREE.MeshToonMaterial({ color: c, emissive: c, emissiveIntensity: 1 })));
+const humos = [], carambanos = [];
+function casa(z, lado, color, techo, i) {
+  const w = 10, h = 5.5, d = 8;
+  const g = new THREE.Group(); g.position.set(lado * 18, 0, z); g.rotation.y = lado < 0 ? Math.PI / 2 : -Math.PI / 2; escena.add(g);
+  R.vestir(caja(w, h, d, K.toon(color), 0, h / 2, 0, g), i % 2 ? R.texturas.revoque('#' + new THREE.Color(color).getHexString(), [2, 1]) : R.texturas.ladrillo('#' + new THREE.Color(color).getHexString(), [2.5, 1.4]));
+  const rh = 3.2, L = Math.hypot(w / 2 + 0.7, rh);
+  [-1, 1].forEach(l => {
+    const ang = Math.atan2(rh, w / 2 + 0.7);
+    const t = caja(L, 0.35, d + 1, K.toon(techo), l * (w / 4 + 0.35), h + rh / 2, 0, g); t.rotation.z = -l * ang;
+    const n = caja(L * 0.96, 0.3, d + 0.8, BLANCO, l * (w / 4 + 0.25), h + rh / 2 + 0.3, 0, g); n.rotation.z = -l * ang;
+  });
+  const frente = new THREE.Shape(); frente.moveTo(-w / 2, 0); frente.lineTo(w / 2, 0); frente.lineTo(0, rh); frente.closePath();
+  [-1, 1].forEach(l => { const m = new THREE.Mesh(new THREE.ShapeGeometry(frente), K.toon(color)); m.position.set(0, h, l * d / 2); m.rotation.y = l > 0 ? 0 : Math.PI; g.add(m); });
+  caja(1, 3, 1, K.toon(0x7a4a3a), w / 4, h + 2.6, -1.5, g); caja(1.15, 0.35, 1.15, BLANCO, w / 4, h + 4.2, -1.5, g);
+  humos.push(K.humo(g, w / 4, h + 4.8, -1.5, 0xf0f2f6, 4));
+  // puerta, ventanas, foquito del porche
+  caja(1.8, 3.2, 0.25, K.toon([0x8a3a2a, 0x2d4fa8, 0x3a6a3a, 0x6e4628][i % 4]), -w / 4 + 0.5, 1.6, d / 2 + 0.1, g);
+  bola(0.12, K.toon(0xf0c040), -w / 4 + 1.1, 1.6, d / 2 + 0.3, g);
+  [w / 4 - 0.3].forEach(xx => { caja(2.4, 1.8, 0.2, ventMat, xx, 2.9, d / 2 + 0.06, g);
+    caja(2.7, 0.25, 0.35, K.toon(0xffffff), xx, 1.95, d / 2 + 0.15, g); caja(0.12, 1.8, 0.25, K.toon(0xffffff), xx, 2.9, d / 2 + 0.12, g);
+    caja(2.6, 0.2, 0.5, BLANCO, xx, 2.15, d / 2 + 0.3, g); });
+  caja(1.6, 1.2, 0.2, ventMat, 0, h + 1.2, d / 2 + 0.06, g);
+  bola(0.22, focoMat, -w / 4 + 1.7, 3.6, d / 2 + 0.3, g);
+  // escalón y arbustos con nieve
+  caja(3, 0.3, 1.4, K.toon(0x9a9aa4), -w / 4 + 0.5, 0.15, d / 2 + 0.8, g);
+  [-1, 1].forEach(l => { bola(0.9, K.toon(0x3a6a46), l * 3.4 + 0.6, 0.6, d / 2 + 1.1, g); bola(0.6, BLANCO, l * 3.4 + 0.6, 1.2, d / 2 + 1.1, g); });
+  // series navideñas en el alero y carámbanos
+  for (let k = 0; k < 16; k++) bola(0.13, lucesNav[(k + i) % 5], -w / 2 + 0.3 + k * (w - 0.6) / 15, h - 0.15 - Math.sin(k / 15 * Math.PI * 4) ** 2 * 0.25, d / 2 + 0.55, g);
+  for (let k = 0; k < 11; k++) {
+    const c = K.malla(new THREE.ConeGeometry(0.1, 0.5 + (k * 7 % 5) * 0.15, 6), K.sinContorno(K.toon(0xd8f0ff, { transparent: true, opacity: 0.85 })), -w / 2 + 0.5 + k * 0.9, h - 0.5, d / 2 + 0.45, false);
+    c.rotation.x = Math.PI; g.add(c); carambanos.push(c);
+  }
+  return g;
+}
+const COLORES_CASA = [0xc96a5a, 0xe9d7b0, 0x8fb7e0, 0xd8a86a, 0xa8c8a0, 0xe0b8c8];
+const TECHOS = [0x5a3a2a, 0x3a4a6a, 0x6a2a2a, 0x4a4a52];
+let ic = 0;
+for (let z = 42; z > -120; z -= 14) for (const lado of [-1, 1]) { casa(z === 0 ? 0 : z, lado, COLORES_CASA[ic % 6], TECHOS[ic % 4], ic); ic++; }
+// calle, banquetas, bordes de nieve
+const asfalto = R.vestir(caja(12, 0.1, 260, K.toon(0x3a3d44), 0, 0.05, -40), R.texturas.adoquin('#3e4249', [3, 60]));
+[-1, 1].forEach(l => { R.vestir(caja(3, 0.25, 260, K.toon(0xc8ccd2), l * 7.5, 0.12, -40), R.texturas.revoque('#c4c8ce', [1, 60]));
+  caja(0.6, 0.35, 260, BLANCO, l * 6.1, 0.2, -40); });
+const nieveCalle = caja(12, 0.04, 260, K.sinContorno(K.toon(0xf2f5fa, { transparent: true, opacity: 0.78 })), 0, 0.12, -40);
+// hielo (brilla) — todo menos la zona de Beto
+const hieloMat = new THREE.MeshStandardMaterial({ color: 0xbfe6ff, roughness: 0.08, metalness: 0.35, transparent: true, opacity: 0.72, emissive: 0x30506a, emissiveIntensity: 0.4 });
+const hielo = new THREE.Group(); escena.add(hielo);
+const placa = (w, d, x, z) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, 0.05, d), hieloMat); m.position.set(x, 0.12, z); m.receiveShadow = true; hielo.add(m); };
+placa(6, 260, 3, -40); placa(6, 120, -3, 67); placa(6, 120, -3, -67); placa(3, 260, 7.5, -40); placa(3, 120, -7.5, 66.5); placa(3, 120, -7.5, -66.5);
+placa(6, 4, 10, 3); placa(4, 3, 10.5, -3);
+// zona de Beto: mojada (con sal) y luego con arena
+const zonaBeto = new THREE.Group(); escena.add(zonaBeto);
+const mojadoMat = new THREE.MeshStandardMaterial({ color: 0x3a404a, roughness: 0.25, metalness: 0.2 });
+const mojado = [[6, 14, -3, 0], [3, 14, -7.5, 0], [5, 3, -11.5, 0.2]].map(([w, d, x, z]) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, 0.05, d), mojadoMat); m.position.set(x, 0.13, z); zonaBeto.add(m); return m; });
+const granos = (n, color, tam) => {
+  const im = new THREE.InstancedMesh(new THREE.BoxGeometry(tam, tam * 0.6, tam), new THREE.MeshStandardMaterial({ color, roughness: 0.6 }), n);
+  const M = new THREE.Matrix4();
+  for (let i = 0; i < n; i++) {
+    const zona = i % 3; let x, z;
+    if (zona === 0) { x = -6 + azar() * 6; z = -7 + azar() * 14; } else if (zona === 1) { x = -9 + azar() * 3; z = -7 + azar() * 14; } else { x = -14 + azar() * 5; z = -1.3 + azar() * 3; }
+    M.makeRotationY(azar() * 3); M.setPosition(x, 0.18, z); im.setMatrixAt(i, M);
+  }
+  im.count = 0; escena.add(im); return im;
+};
+const salSuelo = granos(700, 0xffffff, 0.09);
+const arenaSuelo = granos(900, 0xa0743a, 0.11);
+const arenaTinte = [[6, 14, -3, 0], [3, 14, -7.5, 0], [5, 3, -11.5, 0.2]].map(([w, d, x, z]) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, 0.05, d), new THREE.MeshStandardMaterial({ color: 0x8a6a40, roughness: 0.9, transparent: true, opacity: 0 })); m.position.set(x, 0.15, z); escena.add(m); return m; });
+// granos volando (sal o arena)
+const vuelo = [];
+const vueloMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5 });
+for (let i = 0; i < 40; i++) { const m = new THREE.Mesh(new THREE.SphereGeometry(0.07, 6, 4), vueloMat); m.visible = false; escena.add(m); vuelo.push([m, azar(), azar(), azar()]); }
+function lanzar(p, mano, hacia, color) {   // p: 0-1 a lo largo del lanzamiento
+  vueloMat.color.set(color);
+  vuelo.forEach(([m, a, b, c], i) => {
+    const q = (p * 4 + i / vuelo.length) % 1;
+    m.visible = p > 0 && p < 1;
+    if (!m.visible) return;
+    const dest = [hacia[0] + (a - 0.5) * 6, 0.15, hacia[2] + (b - 0.5) * 6];
+    m.position.set(mano[0] + (dest[0] - mano[0]) * q, mano[1] + (dest[1] - mano[1]) * q + Math.sin(q * Math.PI) * (1.2 + c), mano[2] + (dest[2] - mano[2]) * q);
+  });
+}
+// postes de luz
+const postes = [];
+for (let z = 34; z > -110; z -= 18) for (const l of [-1, 1]) {
+  const g = new THREE.Group(); g.position.set(l * 6.6, 0, z + (l > 0 ? 9 : 0)); escena.add(g);
+  g.add(K.malla(new THREE.CylinderGeometry(0.12, 0.16, 6.5, 8), K.toon(0x2a2a2e), 0, 3.25, 0));
+  g.add(K.malla(new THREE.BoxGeometry(1.4, 0.12, 0.12), K.toon(0x2a2a2e), -l * 0.6, 6.5, 0));
+  g.add(K.malla(new THREE.SphereGeometry(0.38, 12, 8), focoMat, -l * 1.2, 6.3, 0));
+  caja(0.5, 0.15, 0.5, BLANCO, 0, 6.6, 0, g);
+  postes.push(g);
+}
+// pinos, muñecos de nieve, autos con nieve, buzones, botes de basura
+for (let z = 36; z > -110; z -= 14) [-1, 1].forEach(l => pino(escena, l * 23.5, z + 5, 1.1 + ((z * l) % 3 === 0 ? 0.3 : 0)));
+[[-11, 9], [11, 18], [-11, -22]].forEach(([x, z], i) => pino(escena, x, z, 0.8));
+const munecos = [monoNieve(escena, -11.5, 14, 0.9), monoNieve(escena, 11.5, -26, -0.9), monoNieve(escena, -12, -40, 0.8)];
+[[4.5, 22, 0xd9483b], [-4.5, 30, 0x2d7fd6], [4.5, -30, 0x3cbf5a], [-4.5, -44, 0xffffff], [4.5, -58, 0xffc61a]].forEach(([x, z, c]) => {
+  const a = K.auto3d(c); a.position.set(x, 0.1, z); escena.add(a); caja(2.1, 0.3, 2.6, BLANCO, 0, 2.5, -0.3, a); caja(2.4, 0.2, 1.6, BLANCO, 0, 1.6, 1.8, a);
+});
+[[-8.6, 5], [8.6, 7], [-8.6, -9], [8.6, 21]].forEach(([x, z]) => { caja(0.15, 1.4, 0.15, K.toon(0x333333), x, 0.7, z); caja(0.6, 0.5, 0.9, K.toon(0x2d4fa8), x, 1.55, z); caja(0.65, 0.12, 0.95, BLANCO, x, 1.86, z); });
+const botes = [[7.9, -14, 0x3a8a4a], [7.9, -15.6, 0x2d4fa8], [8.4, -12.6, 0x5a5a62]].map(([x, z, c]) => {
+  const g = new THREE.Group(); g.position.set(x, 0.25, z); escena.add(g);
+  g.add(K.malla(new THREE.CylinderGeometry(0.62, 0.52, 1.7, 14), K.toon(c), 0, 0.85, 0));
+  const tapa = K.malla(new THREE.CylinderGeometry(0.68, 0.68, 0.15, 14), K.toon(c), 0, 1.78, 0); g.add(tapa);
+  g.userData = { x, z, tapa }; return g;
+});
+const basura = [];
+for (let i = 0; i < 12; i++) { const m = caja(0.35, 0.25, 0.3, K.toon([0xffffff, 0xd9b06a, 0x8fb7e0, 0xe23c3c][i % 4]), 7.9, 1.2, -14); m.visible = false; basura.push([m, azar() * 6.28, 2 + azar() * 4, azar()]); }
+const golpeBasura = K.polvo(escena, 7.4, 1.0, -13.6, 12, 4, 0xffffff);
+// termómetro del porche del vecino
+function termometro(padre, x, y, z, k = 1) {
+  const g = new THREE.Group(); g.position.set(x, y, z); g.scale.setScalar(k); padre.add(g);
+  const c = document.createElement('canvas'); c.width = 256; c.height = 1024;
+  const x2 = c.getContext('2d'); x2.fillStyle = '#ffffff'; x2.fillRect(0, 0, 256, 1024);
+  x2.fillStyle = '#1b1210'; x2.font = '64px Anton'; x2.textAlign = 'right'; x2.textBaseline = 'middle';
+  for (let tmp = 10; tmp >= -20; tmp -= 5) {
+    const yy = 120 + (10 - tmp) / 30 * 740;
+    x2.fillStyle = tmp === 0 ? '#2d6fd6' : '#1b1210'; x2.fillRect(150, yy - 5, 80, 10); x2.fillText(String(tmp), 140, yy);
+    for (let s = 1; s < 5 && tmp > -20; s++) x2.fillRect(190, yy + s * 148 / 5 - 2, 40, 4);
+  }
+  x2.fillStyle = '#1b1210'; x2.font = '70px Anton'; x2.textAlign = 'center'; x2.fillText('°C', 128, 960);
+  const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
+  const tabla = new THREE.Mesh(new THREE.BoxGeometry(1.8, 6.6, 0.2), [K.toon(0xdddddd), K.toon(0xdddddd), K.toon(0xdddddd), K.toon(0xdddddd), K.sinContorno(new THREE.MeshBasicMaterial({ map: tex, color: 0xa8a8a8 })), K.toon(0xdddddd)]);
+  tabla.position.set(0, 3.3, 0); g.add(tabla);
+  g.add(K.malla(new THREE.CylinderGeometry(0.22, 0.22, 5.4, 12), K.sinContorno(K.toon(0xffffff, { transparent: true, opacity: 0.45 })), 0.55, 3.6, 0.25, false));
+  const rojo = K.toon(0xe02a2a, { emissive: 0x801010, emissiveIntensity: 0.5 });
+  bola(0.42, rojo, 0.55, 0.75, 0.25, g);
+  const col = K.malla(new THREE.CylinderGeometry(0.13, 0.13, 1, 10), rojo, 0, 0, 0, false);
+  col.geometry.translate(0, 0.5, 0); col.position.set(0.55, 1.0, 0.25); g.add(col);
+  // el canvas mapea 10 → y=120 px y -20 → y=860 px sobre una tabla de 6.6 de alto (y de 0 a 6.6)
+  const yDe = tmp => 6.6 - (120 + (10 - tmp) / 30 * 740) / 1024 * 6.6;
+  return tmp => { col.scale.y = Math.max(0.05, yDe(tmp) - 1.0); };
+}
+caja(0.3, 3.2, 0.3, K.toon(0x6e4628), 9.6, 1.6, -6.8);
+const termoPorche = termometro(escena, 9.0, 1.2, -6.55, 0.55); termoPorche(-4);
+// bultos de sal del vecino
+const bultos = new THREE.Group(); bultos.position.set(9.8, 0.25, -4.6); escena.add(bultos);
+const bultoMat = K.toon(0xf4f4f4), bandaMat = K.toon(0x2d6fd6);
+for (let i = 0; i < 10; i++) {
+  const fila = i < 4 ? 0 : i < 7 ? 1 : i < 9 ? 2 : 3, enFila = [0, 4, 7, 9][fila], j = i - enFila;
+  const b = new THREE.Group(); b.position.set((j - (3 - fila) / 2) * 1.25, 0.35 + fila * 0.62, 0); b.rotation.y = (i % 3 - 1) * 0.12; bultos.add(b);
+  b.add(K.malla(new THREE.BoxGeometry(1.15, 0.6, 0.8), bultoMat, 0, 0, 0)); b.add(K.malla(new THREE.BoxGeometry(1.17, 0.25, 0.82), bandaMat, 0, 0, 0));
+}
+bultos.visible = false;
+
+// --- la camioneta del vecino
+function camioneta(color) {
+  const g = new THREE.Group(), c = K.toon(color), negro = K.toon(0x222226), cromo = K.toon(0xd8d8e0);
+  const vidrio = K.sinContorno(K.toon(0x9fd3ff, { transparent: true, opacity: 0.35 }));
+  g.add(K.malla(new THREE.BoxGeometry(2.7, 1.0, 6.2), c, 0, 1.05, 0));
+  g.add(K.malla(new THREE.BoxGeometry(2.5, 0.16, 2.3), c, 0, 2.75, 0.7));
+  [[-1.18, 1.75], [1.18, 1.75], [-1.18, -0.38], [1.18, -0.38]].forEach(([x, z]) => g.add(K.malla(new THREE.BoxGeometry(0.14, 1.2, 0.14), c, x, 2.15, z)));
+  g.add(K.malla(new THREE.BoxGeometry(2.4, 1.1, 0.06), vidrio, 0, 2.15, 1.8, false));
+  [-1, 1].forEach(l => g.add(K.malla(new THREE.BoxGeometry(0.06, 1.0, 2.0), vidrio, l * 1.2, 2.15, 0.7, false)));
+  g.add(K.malla(new THREE.BoxGeometry(2.4, 1.1, 0.12), c, 0, 2.15, -0.4));
+  [-1, 1].forEach(l => g.add(K.malla(new THREE.BoxGeometry(0.15, 0.6, 2.6), c, l * 1.28, 1.85, -1.75)));
+  g.add(K.malla(new THREE.BoxGeometry(2.7, 0.6, 0.15), c, 0, 1.85, -3.05));
+  g.add(K.malla(new THREE.BoxGeometry(2.9, 0.35, 0.3), cromo, 0, 0.75, 3.15));
+  [-0.9, 0.9].forEach(x => g.add(K.malla(new THREE.BoxGeometry(0.5, 0.3, 0.1), K.sinContorno(K.toon(0xfff6c0, { emissive: 0xffe080, emissiveIntensity: 1 })), x, 1.25, 3.12, false)));
+  const ruedas = [];
+  [[-1.35, 2.0], [1.35, 2.0], [-1.35, -2.0], [1.35, -2.0]].forEach(([x, z]) => {
+    const rr = new THREE.Group(); rr.position.set(x, 0.62, z); g.add(rr);
+    const rueda = K.malla(new THREE.CylinderGeometry(0.62, 0.62, 0.5, 18), negro, 0, 0, 0); rueda.rotation.z = Math.PI / 2; rr.add(rueda);
+    const rin = K.malla(new THREE.BoxGeometry(0.52, 0.18, 0.7), cromo, 0, 0, 0); rr.add(rin); ruedas.push(rr);
+  });
+  const nieveTecho = caja(2.4, 0.25, 2.2, BLANCO, 0, 2.95, 0.7, g), nieveCofre = caja(2.5, 0.2, 1.3, BLANCO, 0, 1.65, 2.4, g);
+  g.userData = { ruedas, nieve: [nieveTecho, nieveCofre] };
+  return g;
+}
+const troca = camioneta(0xd9483b); escena.add(troca);
+const TROCA0 = [9.8, 0.05, 3];
+const vecinoManeja = new Personaje2D('vecino', 2.9).agregar(troca, -0.5, 0.65, 0.15);
+const humoEscape = K.humo(troca, 0.8, 0.6, -3.2, 0xc8ccd4, 5);
+function ponerTroca(x, z, rotY) { troca.position.set(x, TROCA0[1], z); troca.rotation.set(0, rotY, 0); }
+
+// --- personajes principales y vecinos de la colonia
+const beto = new Personaje2D('beto', 4.4).agregar(escena, -10, 1.0, 0.0);
+const vecino = new Personaje2D('vecino', 4.4).agregar(escena, 12.4, -1.2, 0.0);
+const TIPOS = ['invierno_a', 'invierno_b', 'invierno_c', 'invierno_d'];
+const gente = [
+  [-12.5, 13.2], [-10.3, 15.4], [10, 15], [7.6, 27], [-7.6, -24], [7.6, -34], [-7.6, 31], [9.8, -27.5], [-12.6, -38.5], [7.6, -48],
+].map(([x, z], i) => new Personaje2D(TIPOS[i % 4], i < 2 ? 3.2 : 4.2, 0.4).agregar(escena, x, z, 0.2));
+const mirones = [[-7.6, -17.5], [-7.4, -20.5]].map(([x, z], i) => new Personaje2D(TIPOS[(i + 1) % 4], 4.2, 0.4).agregar(escena, x, z, 0.2));
+
+// ======================================================== LABORATORIO (x = -300)
+const XL = -300;
+const lab = new THREE.Group(); lab.position.set(XL, 0, 0); escena.add(lab);
+const cp = document.createElement('canvas'); cp.width = 512; cp.height = 512;
+{ const c = cp.getContext('2d'); c.fillStyle = '#1e3358'; c.fillRect(0, 0, 512, 512); c.strokeStyle = 'rgba(160,200,255,0.25)'; c.lineWidth = 3;
+  for (let i = 0; i <= 512; i += 64) { c.beginPath(); c.moveTo(i, 0); c.lineTo(i, 512); c.stroke(); c.beginPath(); c.moveTo(0, i); c.lineTo(512, i); c.stroke(); } }
+const texP = new THREE.CanvasTexture(cp); texP.colorSpace = THREE.SRGBColorSpace; texP.wrapS = texP.wrapT = THREE.RepeatWrapping; texP.repeat.set(10, 4);
+const pared = caja(80, 24, 0.4, K.toon(0x1e3358), 10, 12, -4, lab); pared.material = new THREE.MeshStandardMaterial({ map: texP, roughness: 0.9 }); pared.onBeforeRender = () => {};
+R.vestir(caja(80, 0.3, 30, K.toon(0x2a2a30), 10, 0.15, 8, lab), R.texturas.madera('#5a4a3a', [10, 4]));
+const hieloFondo = caja(12, 9, 0.2, K.sinContorno(K.toon(0xbfe6ff, { transparent: true, opacity: 0, emissive: 0x4080b0, emissiveIntensity: 0.4 })), 0, 7.3, -2.5, lab);
+// mesa con matraces y repisas
+caja(16, 0.4, 3, K.toon(0xf0f0f0), 0, 2.2, 3.5, lab); [-7, 7].forEach(x => caja(0.4, 2.2, 2.6, K.toon(0x9a9aa4), x, 1.1, 3.5, lab));
+const vidrioLab = c => K.sinContorno(K.toon(c, { transparent: true, opacity: 0.55, emissive: c, emissiveIntensity: 0.25 }));
+[[-5.5, 0x4fc0e0, 0.6], [-3.6, 0x7fe07f, 0.5], [3.4, 0xff8fb0, 0.55], [5.6, 0xffd600, 0.45]].forEach(([x, c, rad]) => {
+  lab.add(K.malla(new THREE.CylinderGeometry(rad, rad * 1.3, 1.6, 14), vidrioLab(c), x, 3.2, 3.6));
+  lab.add(K.malla(new THREE.CylinderGeometry(rad * 0.35, rad * 0.35, 0.8, 10), vidrioLab(0xffffff), x, 4.4, 3.6));
+});
+[-16, 22].forEach(x => { for (let y = 3; y < 15; y += 3.2) { caja(6, 0.25, 1.4, K.toon(0x8a5a35), x, y, -3.2, lab);
+  for (let i = 0; i < 5; i++) lab.add(K.malla(new THREE.CylinderGeometry(0.35, 0.35, 1.2 + (i % 2) * 0.4, 10), vidrioLab([0x4fc0e0, 0xff8fb0, 0x7fe07f, 0xffd600, 0xc9a2d6][(i + y | 0) % 5]), x - 2.2 + i * 1.1, y + 0.75, -3.0)); } });
+const cartelAgua = K.cartel(lab, 'H₂O = AGUA', -3.2, 13.2, -3.6, 5.4, 1.4, '#2d6fd6', '#ffffff');
+const cartelSal = K.cartel(lab, 'NaCl = SAL', 3.2, 13.2, -3.6, 5.4, 1.4, '#ffffff', '#1b1210');
+// moléculas de agua con carita
+const COLS = 5, FILAS = 4, SEP = 2.1, CY = 7.3;
+const molMat = K.toon(0x6fc3ff), hMat = K.toon(0xffffff), ojoMat = K.toon(0x1b1210);
+const moleculas = [];
+for (let f = 0; f < FILAS; f++) for (let c = 0; c < COLS; c++) {
+  const g = new THREE.Group(); lab.add(g);
+  g.add(K.malla(new THREE.SphereGeometry(0.72, 18, 14), molMat, 0, 0, 0));
+  [-1, 1].forEach(l => g.add(K.malla(new THREE.SphereGeometry(0.36, 12, 10), hMat, l * 0.62, 0.5, 0.2)));
+  [-0.22, 0.22].forEach(x => g.add(K.malla(new THREE.SphereGeometry(0.09, 8, 6), ojoMat, x, 0.08, 0.68, false)));
+  const boca = K.malla(new THREE.TorusGeometry(0.15, 0.04, 6, 12, Math.PI), ojoMat, 0, -0.18, 0.68, false); boca.rotation.z = Math.PI; g.add(boca);
+  const base = [(c - (COLS - 1) / 2) * SEP, CY + (f - (FILAS - 1) / 2) * SEP, 0];
+  moleculas.push({ g, base, f, c, fase: azar() * 6.28, dx: (azar() - 0.5) * 2.4, dy: (azar() - 0.5) * 2.4 });
+}
+const manoMat = K.toon(0xffd600);
+const manos = [];
+moleculas.forEach((m, i) => {
+  if (m.c < COLS - 1) manos.push([i, i + 1]);
+  if (m.f < FILAS - 1) manos.push([i, i + COLS]);
+});
+const brazosMol = manos.map(() => { const b = K.malla(new THREE.CylinderGeometry(0.1, 0.1, 1, 8), manoMat, 0, 0, 0, false); lab.add(b); return b; });
+const cristales = [];
+for (let i = 0; i < 10; i++) {
+  const s = K.malla(new THREE.BoxGeometry(0.62, 0.62, 0.62), K.toon(i % 2 ? 0xffffff : 0xd8e0ea), 0, 0, 0.3); s.rotation.set(0.5, 0.6, 0); lab.add(s);
+  const f = i % 3, c = Math.floor(i / 3) % 4;
+  cristales.push({ s, dest: [(c - 1.5) * SEP, CY + (f - 1) * SEP, 0.3], caida: (i * 0.37) % 1 });
+}
+let estadoMol = { junta: 0, sal: 0 };
+function ponerMoleculas(t) {
+  const { junta, sal } = estadoMol;
+  moleculas.forEach((m, i) => {
+    const suelta = 1 - junta + sal * 0.9;
+    const w = Math.min(1, suelta);
+    let x = m.base[0] + (m.dx * Math.sin(t * 1.3 + m.fase)) * w * 0.7, y = m.base[1] + (m.dy * Math.cos(t * 1.1 + m.fase)) * w * 0.7;
+    if (sal > 0) { x += Math.sign(m.base[0] || 0.01) * sal * 0.35 * (Math.abs(m.c - 2) + 0.5) * 0.5; y += (m.f - 1.5) * sal * 0.25; }
+    m.g.position.set(x, y, 0);
+    m.g.rotation.z = Math.sin(t * 2 + m.fase) * 0.35 * w;
+    m.g.children[0].material = molMat;
+  });
+  manos.forEach(([a, b], k) => {
+    const A = moleculas[a].g.position, B = moleculas[b].g.position, br = brazosMol[k];
+    const visible = junta > 0.5 && sal < 0.3;
+    br.visible = visible; if (!visible) return;
+    br.position.copy(A).add(B).multiplyScalar(0.5);
+    br.scale.set(1, A.distanceTo(B) * Math.min(1, (junta - 0.5) * 2 + 0.01) - 1.2, 1);
+    br.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), B.clone().sub(A).normalize());
+  });
+  cristales.forEach(({ s, dest, caida }) => {
+    const p = cl((sal * 1.6) - caida * 0.6);
+    s.visible = sal > 0;
+    s.position.set(dest[0], dest[1] + (1 - K.frena(p)) * 9, 0.3); s.rotation.y = t * 0.8 + caida * 6;
+  });
+  hieloFondo.material.opacity = 0.45 * cl(junta * 2 - 1) * (1 - sal);
+}
+// termómetro grande y vaso con agua salada
+const termoLab = termometro(lab, 13, 0.3, 0, 1); termoLab(10);
+const vaso = new THREE.Group(); vaso.position.set(16.3, 0.3, 1.2); lab.add(vaso);
+vaso.add(K.malla(new THREE.CylinderGeometry(1.2, 1.1, 3, 20, 1, true), K.sinContorno(K.toon(0xffffff, { transparent: true, opacity: 0.3, side: THREE.DoubleSide })), 0, 1.5, 0, false));
+const agua = K.malla(new THREE.CylinderGeometry(1.1, 1.05, 2.2, 20), K.sinContorno(K.toon(0x4fa8f0, { transparent: true, opacity: 0.75, emissive: 0x1050a0, emissiveIntensity: 0.3 })), 0, 1.1, 0, false); vaso.add(agua);
+for (let i = 0; i < 14; i++) vaso.add(K.malla(new THREE.BoxGeometry(0.18, 0.18, 0.18), K.toon(0xffffff), (azar() - 0.5) * 1.4, 0.15, (azar() - 0.5) * 1.4, false));
+K.cartel(lab, 'AGUA + SAL', 16.3, 4.0, 1.3, 3.2, 0.8, '#2d6fd6', '#ffffff');
+
+// ======================================================== CARRETERA (x = 300)
+const XC = 300;
+R.vestir(caja(10, 0.1, 300, K.toon(0x3a3d44), XC, 0.05, -60), R.texturas.adoquin('#3e4249', [3, 70]));
+[-1, 1].forEach(l => caja(0.25, 0.12, 300, K.sinContorno(K.toon(0xffd600)), XC + l * 4.5, 0.12, -60));
+for (let z = 80; z > -200; z -= 8) caja(0.25, 0.12, 3, K.sinContorno(K.toon(0xffffff)), XC, 0.12, z);
+for (let z = 60; z > -200; z -= 11) [-1, 1].forEach(l => pino(escena, XC + l * (11 + (Math.abs(z) % 3) * 3), z, 1.2 + (Math.abs(z) % 2) * 0.3));
+for (let z = 50; z > -200; z -= 20) { caja(0.2, 1.1, 0.2, K.toon(0xffffff), XC + 6.2, 0.55, z); caja(0.22, 0.25, 0.22, K.sinContorno(K.toon(0xff4040, { emissive: 0xff2020 })), XC + 6.2, 1.1, z); }
+const avisoHielo = K.cartel(escena, '¡CUIDADO: HIELO!', XC + 7.5, 4.2, -12, 4.6, 1.2, '#ffd600', '#1b1210'); avisoHielo.rotation.y = -0.6;
+caja(0.2, 3.8, 0.2, K.toon(0x666666), XC + 7.5, 1.9, -12.1);
+// pipa de salmuera
+const pipa = new THREE.Group(); escena.add(pipa); pipa.rotation.y = Math.PI;
+caja(2.8, 2.4, 2.4, K.toon(0xff7a1a), 0, 2.0, 3.2, pipa); caja(2.5, 0.9, 0.08, K.sinContorno(K.toon(0x9fd3ff)), 0, 2.6, 4.42, pipa);
+caja(2.8, 0.5, 8.4, K.toon(0x55555c), 0, 0.9, 0, pipa);
+const tanque = K.malla(new THREE.CylinderGeometry(1.25, 1.25, 5.6, 20), K.toon(0xf2f2f2), 0, 2.3, -1.2); tanque.rotation.x = Math.PI / 2; pipa.add(tanque);
+[-2.2, 0, 2.2].forEach(z => { const b = K.malla(new THREE.CylinderGeometry(1.3, 1.3, 0.35, 20), K.toon(0xff7a1a), 0, 2.3, z - 1.2); b.rotation.x = Math.PI / 2; pipa.add(b); });
+caja(3.4, 0.15, 0.15, K.toon(0x333333), 0, 0.5, -4.3, pipa);
+[[-1.2, 2.8], [1.2, 2.8], [-1.2, -2.6], [1.2, -2.6]].forEach(([x, z]) => { const w = K.malla(new THREE.CylinderGeometry(0.6, 0.6, 0.5, 16), K.toon(0x222226), x, 0.6, z); w.rotation.z = Math.PI / 2; pipa.add(w); });
+const luzPipa = K.malla(new THREE.BoxGeometry(1.2, 0.25, 0.4), K.sinContorno(K.toon(0xffa020, { emissive: 0xff8000, emissiveIntensity: 1.5 })), 0, 3.3, 3.2, false); pipa.add(luzPipa);
+K.cartel(pipa, 'SALMUERA', 1.27, 2.3, -1.2, 3.6, 0.8, '#2d6fd6', '#ffffff').rotation.y = Math.PI / 2;
+const chorros = [];
+for (let i = 0; i < 36; i++) { const m = K.malla(new THREE.SphereGeometry(0.09, 6, 4), K.sinContorno(K.toon(0x9fd8ff, { transparent: true, opacity: 0.8 })), 0, 0, 0, false); escena.add(m); chorros.push([m, i % 3, azar()]); }
+const rayas = [-2.5, 0, 2.5].map(x => { const m = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.04, 1), mojadoMat); m.position.set(XC + x, 0.12, 0); m.visible = false; escena.add(m); return m; });
+function rayasHasta(z0, z1) { rayas.forEach(m => { m.visible = z0 > z1; m.scale.z = Math.max(0.01, z0 - z1); m.position.z = (z0 + z1) / 2; }); }
+// quitanieves
+const quita = new THREE.Group(); escena.add(quita); quita.rotation.y = Math.PI;
+caja(2.8, 2.6, 2.6, K.toon(0xffc61a), 0, 2.1, 0.8, quita); caja(2.5, 0.9, 0.08, K.sinContorno(K.toon(0x9fd3ff)), 0, 2.8, 2.12, quita);
+caja(2.8, 1.4, 4, K.toon(0x55555c), 0, 1.3, -2.2, quita);
+const pala = caja(4.8, 1.4, 0.3, K.toon(0xe23c3c), 0, 0.8, 3.2, quita); pala.rotation.y = 0.35;
+[[-1.2, 1.4], [1.2, 1.4], [-1.2, -2.8], [1.2, -2.8]].forEach(([x, z]) => { const w = K.malla(new THREE.CylinderGeometry(0.65, 0.65, 0.5, 16), K.toon(0x222226), x, 0.65, z); w.rotation.z = Math.PI / 2; quita.add(w); });
+const torreta = K.malla(new THREE.BoxGeometry(1.0, 0.3, 0.4), K.sinContorno(K.toon(0xffa020, { emissive: 0xff8000, emissiveIntensity: 1.5 })), 0, 3.55, 0.8, false); quita.add(torreta);
+const capaNieve = caja(10, 0.35, 1, BLANCO, XC, 0.2, 0);
+pipa.position.set(XC, 0, 30); quita.position.set(XC, 0, 26); pipa.visible = quita.visible = false;
+chorros.forEach(([m]) => (m.visible = false));
+const montonPala = [];
+for (let i = 0; i < 9; i++) montonPala.push(bola(0.5 + (i % 3) * 0.2, BLANCO, XC, 0, 0));
+
+// ======================================================== animación
+let temblor = 0, destello = 0, T = 0;
+function palomita(ctx, x, y, prog, ok = true) {
+  if (prog <= 0) return;
+  const k = K.rebote(Math.min(1, prog)) * 95, X = x * K.ANCHO, Y = y * K.ALTO;
+  ctx.save(); ctx.beginPath(); ctx.arc(X, Y, k, 0, 7);
+  ctx.fillStyle = ok ? '#3cbf5a' : '#e23c3c'; ctx.fill(); ctx.lineWidth = 12; ctx.strokeStyle = '#1b1210'; ctx.stroke();
+  ctx.lineWidth = k * 0.22; ctx.strokeStyle = '#fff'; ctx.lineCap = 'round'; ctx.beginPath();
+  if (ok) { ctx.moveTo(X - k * 0.45, Y); ctx.lineTo(X - k * 0.1, Y + k * 0.35); ctx.lineTo(X + k * 0.5, Y - k * 0.35); }
+  else { ctx.moveTo(X - k * 0.4, Y - k * 0.4); ctx.lineTo(X + k * 0.4, Y + k * 0.4); ctx.moveTo(X - k * 0.4, Y + k * 0.4); ctx.lineTo(X + k * 0.4, Y - k * 0.4); }
+  ctx.stroke(); ctx.restore();
+}
+const enLab = (x, y, z) => [XL + x, y, z];
+const W = (P, k) => P.w(k);
+// estado de la colonia por "momento": noche (sal recién echada), mañana (hielo), noche fría (-15)
+let momento = 'noche', salK = 0, arenaK = 0;
+function colonia(m) { momento = m; }
+function ponerBotes(p) {   // 0 = parados, 1 = volando / tirados
+  botes.forEach((b, i) => {
+    const { x, z, tapa } = b.userData;
+    if (p <= 0) { b.position.set(x, 0.25, z); b.rotation.set(0, 0, 0); tapa.position.set(0, 1.78, 0); tapa.rotation.set(0, 0, 0); return; }
+    const k = K.frena(cl(p));
+    b.position.set(x + k * (1.2 + i * 0.6), 0.25 + Math.sin(cl(p) * Math.PI) * 1.2, z - k * (1 + i * 0.8));
+    b.rotation.set(k * 1.5, 0, -k * (1.4 + i * 0.1));
+    tapa.position.set(0, 1.78 + Math.sin(cl(p * 1.3) * Math.PI) * 3, k * 1.5); tapa.rotation.x = k * 4;
+  });
+  basura.forEach(([m, a, v, s]) => {
+    m.visible = p > 0; if (!m.visible) return;
+    const k = K.frena(cl(p));
+    m.position.set(7.9 + Math.cos(a) * v * k, 0.25 + Math.max(0, Math.sin(cl(p) * Math.PI) * (2 + s * 2)), -14 + Math.sin(a) * v * k);
+    m.rotation.set(k * 6 * s, k * 4, 0);
+  });
+}
+// camino de la camioneta patinando
+const RUTA = [[0, TROCA0[0], TROCA0[2], -Math.PI / 2], [0.35, 4.5, 0.5, -Math.PI / 2 - 0.9], [0.7, 4.0, -7, -Math.PI / 2 - 2.6], [1, 6.2, -12.2, -Math.PI / 2 - 3.6]];
+function trocaRuta(p) {
+  p = cl(p); let i = 0; while (i < RUTA.length - 2 && p > RUTA[i + 1][0]) i++;
+  const [p0, x0, z0, r0] = RUTA[i], [p1, x1, z1, r1] = RUTA[i + 1], k = K.suave((p - p0) / (p1 - p0));
+  ponerTroca(x0 + (x1 - x0) * k, z0 + (z1 - z0) * k, r0 + (r1 - r0) * k);
+}
+const MANO_BETO = [-9.2, 2.6, 1.0];
+
+const FRASES = [
+  { // 0. ¿Por qué le echan sal a las calles cuando va a nevar?
+    amb: 'noche',
+    tomas: [[0, (u, d) => { const k = K.suave(u / d); return { pos: lerp([2, 26, 46], [-2.5, 5.2, 10], k), mira: lerp([0, 2, -10], [-9.5, 2.6, 0.5], k), fov: 50 }; }]],
+    act: (u, d) => { colonia('noche'); salK = 0; arenaK = 0; ponerTroca(...[TROCA0[0], TROCA0[2]], -Math.PI / 2); ponerBotes(0); bultos.visible = false; beto.malla.position.set(-10, 0, 1.0); vecino.malla.position.set(12.4, 0, -1.2); vecino.malla.visible = true; },
+    pj: [[beto, () => ({ cara: 'feliz', objeto: 'sal', brazos: [15, 60], codos: [10, 60] })]],
+    over: (ctx, u, d) => K.letrero(ctx, '¿SAL?', 0.5, 0.17, (u / d - 0.35) / 0.2, { tam: 230 }),
+  },
+  { // 1. Es de noche, viene una tormenta, y Beto sale a echarle sal a su calle.
+    amb: 'noche', tormenta: true,
+    tomas: [[0, u => ({ pos: [1 - u * 0.5, 9 - u * 0.4, 32 - u * 2], mira: [0, 4, -12], fov: 52 })],
+            [(d, P) => W(P, 6) - 0.1, u => ({ pos: [-3.4 + u * 0.2, 4.2, 9.5 - u * 0.4], mira: [-8.6, 2.4, 0.2], fov: 48 })]],
+    act: (u, d, P) => { const p = cl((u - W(P, 9)) / Math.max(0.5, d - W(P, 9)));
+      salK = p; lanzar(u > W(P, 9) && u < d - 0.05 ? p : 0, MANO_BETO, [-6, 0, 0.5], 0xffffff);
+      beto.malla.position.set(-12 + 2 * K.suave(cl((u - W(P, 6)) / 0.7)), 0, 1.0); },
+    fin: () => { lanzar(0, MANO_BETO, [0, 0, 0], 0xffffff); salK = 1; beto.malla.position.set(-10, 0, 1.0); },
+    pj: [[beto, (u, d, P) => ({ cara: 'feliz', objeto: 'sal', camina: u > W(P, 6) && u < W(P, 6) + 0.7, brazos: [u > W(P, 9) ? 90 + Math.sin(T * 14) * 40 : 15, 60], codos: [10, 60] })]],
+    over: (ctx, u, d, P) => { if (u < W(P, 6)) K.letrero(ctx, 'TORMENTA', 0.5, 0.16, (u - W(P, 3)) / 0.25, { tam: 170, color: '#ffffff', giro: 0 }); },
+  },
+  { // 2. El vecino se ríe: ¿Qué, vas a cocinar la banqueta?
+    amb: 'noche',
+    tomas: [[0, u => ({ pos: [6.4 + u * 0.15, 4.2, 4.2 - u * 0.2], mira: [12.4, 3.0, -1.2], fov: 46 })]],
+    pj: [[vecino, (u) => ({ cara: 'feliz', habla: true, objeto: 'taza', brazos: [70 + Math.sin(T * 9) * 12, 60], codos: [80, 70], tiembla: 0.3 })]],
+    over: (ctx, u, d) => K.letrero(ctx, 'JAJAJA', 0.5, 0.17, (u - 0.15) / 0.25, { tam: 180, color: '#ffffff' }),
+  },
+  { // 3. A la mañana siguiente, todo está congelado.
+    amb: 'invierno',
+    tomas: [[0, u => ({ pos: [3, 7.5 - u * 0.5, 24 - u * 2], mira: [1, 1.5, -6], fov: 50 })],
+            [(d) => d * 0.55, u => ({ pos: [5.2 - u * 0.3, 1.3, 6], mira: [3.2, 0.2, -3], fov: 46 })]],
+    act: () => { colonia('manana'); vecino.malla.visible = false; },
+    over: (ctx, u, d) => K.letrero(ctx, '¡TODO HIELO!', 0.5, 0.17, (u / d - 0.55) / 0.15, { tam: 170, color: '#9fdcff' }),
+  },
+  { // 4. El vecino arranca su camioneta, acelera… y se va patinando hasta el bote de basura.
+    amb: 'invierno',
+    tomas: [[0, u => ({ pos: [1.6 + u * 0.2, 3.6, -0.6], mira: [9.8, 2.0, 3.4], fov: 46 })],
+            [(d, P) => W(P, 8) - 0.05, (u, d) => { const p = troca.position; return { pos: [-6, 9.5, 11 - u * 1.5], mira: [p.x - 1, 1, p.z - 1], fov: 50 }; }],
+            [(d, P) => W(P, 12) - 0.15, u => ({ pos: [3.4, 4.2, -24 + u * 0.3], mira: [7.2, 1.4, -13.6], fov: 48 })]],
+    act: (u, d, P) => {
+      const arranca = cl((u - W(P, 5)) / Math.max(0.3, W(P, 8) - W(P, 5))), patina = cl((u - W(P, 8)) / Math.max(0.5, W(P, 13) - W(P, 8)));
+      trocaRuta(patina);
+      troca.userData.ruedas.forEach(rr => (rr.children[0].rotation.x = u * (arranca > 0 ? 40 : 0)));
+      if (patina <= 0 && arranca > 0) troca.position.x += Math.sin(T * 60) * 0.05;
+      const choque = (u - W(P, 13)) / 1.0;
+      ponerBotes(choque);
+      golpeBasura(choque);
+      temblor = choque > 0 && choque < 0.4 ? 1 - choque / 0.4 : 0;
+      destello = choque > 0 && choque < 0.15 ? 0.5 : 0;
+    },
+    fin: () => { trocaRuta(1); ponerBotes(1); golpeBasura(2); },
+    pj: [[vecinoManeja, (u, d, P) => ({ cara: u < W(P, 5) ? 'feliz' : u < W(P, 13) ? 'miedo' : 'mareado', brazos: [u < W(P, 8) ? 60 : 150, u < W(P, 8) ? 60 : 150], codos: [60, 60], tiembla: u > W(P, 8) ? 1 : 0 })],
+         ...mirones.map((m, i) => [m, (u, d, P) => ({ cara: u > W(P, 13) ? (i ? 'feliz' : 'sorpresa') : 'normal', brazos: [15, u > W(P, 13) ? 150 : 15], codos: [10, 20] })])],
+    over: (ctx, u, d, P) => { if (u > W(P, 5) && u < W(P, 8)) K.letrero(ctx, 'VRUUUM', 0.5, 0.17, (u - W(P, 5)) / 0.2, { tam: 160, color: '#ffffff' });
+      K.letrero(ctx, '¡CRASH!', 0.5, 0.17, (u - W(P, 13)) / 0.15, { tam: 210 }); },
+  },
+  { // 5. Mientras, Beto sale tranquilo, sin resbalarse ni una vez.
+    amb: 'invierno',
+    tomas: [[0, u => { const b = beto.malla.position; return { pos: [b.x + 4.6, 4.0, 8.6], mira: [b.x + 0.4, 2.4, b.z], fov: 48 }; }]],
+    act: (u, d) => { beto.malla.position.set(-13 + 6.5 * K.suave(u / d), 0, 0.6 + K.suave(u / d) * 0.6); },
+    fin: () => beto.malla.position.set(-6.5, 0, 1.2),
+    pj: [[beto, (u, d) => ({ cara: 'feliz', objeto: 'taza', camina: u / d < 0.92, brazos: [15, 70], codos: [10, 80] })]],
+    over: (ctx, u, d) => palomita(ctx, 0.5, 0.17, (u / d - 0.75) / 0.12),
+  },
+  { // 6. ¿Por qué?
+    amb: 'invierno',
+    tomas: [[0, u => ({ pos: [0.2, 3.4 - u * 0.8, 6.8 - u * 1.2], mira: [0, 0, -1.5], fov: 50 })]],
+    over: (ctx, u, d) => K.letrero(ctx, '¿POR QUÉ?', 0.5, 0.17, u / 0.15, { tam: 220 }),
+  },
+  { // 7. El agua se congela a cero grados, cuando sus moléculas se agarran de la mano y forman hielo.
+    amb: 'lab',
+    tomas: [[0, u => ({ pos: enLab(13.5, 3.8, 8.5 - u * 0.3), mira: enLab(13.5, 3.6, 0), fov: 46 })],
+            [(d, P) => W(P, 7) - 0.05, u => ({ pos: enLab(0, CY, 20 - u * 0.4), mira: enLab(0, CY - 0.2, 0), fov: 50 })]],
+    act: (u, d, P) => { termoLab(10 - 10 * K.suave(u / Math.max(0.5, W(P, 6))));
+      estadoMol = { junta: K.suave((u - W(P, 10)) / Math.max(0.4, W(P, 16) - W(P, 10))), sal: 0 }; },
+    fin: () => { estadoMol = { junta: 1, sal: 0 }; termoLab(0); },
+    over: (ctx, u, d, P) => { if (u < W(P, 7)) K.letrero(ctx, '0 °C', 0.5, 0.15, (u - W(P, 5)) / 0.2, { tam: 200, color: '#9fdcff' });
+      else K.letrero(ctx, 'HIELO', 0.5, 0.15, (u - W(P, 16)) / 0.2, { tam: 200, color: '#9fdcff' }); },
+  },
+  { // 8. Pero la sal se mete en medio y no las deja agarrarse.
+    amb: 'lab',
+    tomas: [[0, u => ({ pos: enLab(0.3, CY + 0.3, 18.5 - u * 0.5), mira: enLab(0, CY - 0.2, 0), fov: 50 })]],
+    act: (u, d, P) => { estadoMol = { junta: 1, sal: K.suave((u - W(P, 2)) / Math.max(0.6, d * 0.6)) }; },
+    fin: () => { estadoMol = { junta: 1, sal: 1 }; },
+    over: (ctx, u, d, P) => K.letrero(ctx, '¡SUÉLTENSE!', 0.5, 0.15, (u / d - 0.55) / 0.15, { tam: 170, color: '#ffffff' }),
+  },
+  { // 9. Con sal, el agua aguanta hasta unos nueve grados bajo cero sin congelarse.
+    amb: 'lab',
+    tomas: [[0, u => ({ pos: enLab(14.6 - u * 0.2, 4.0, 10.5 - u * 0.3), mira: enLab(14.6, 3.4, 0), fov: 46 })]],
+    act: (u, d, P) => { termoLab(-9 * K.suave((u - W(P, 5)) / Math.max(0.6, W(P, 10) - W(P, 5))));
+      agua.scale.y = 1 + Math.sin(T * 6) * 0.015; agua.rotation.y = T; },
+    fin: () => termoLab(-9),
+    over: (ctx, u, d, P) => { K.letrero(ctx, '-9 °C', 0.5, 0.15, (u - W(P, 9)) / 0.2, { tam: 210 });
+      if (u > W(P, 12)) palomita(ctx, 0.8, 0.15, (u - W(P, 12)) / 0.2); },
+  },
+  { // 10. Por eso las ciudades rocían agua con sal antes de la tormenta: así el hielo no se pega al piso.
+    amb: 'invierno',
+    tomas: [[0, (u, d) => { const p = pipa.position; return { pos: [p.x + 8, 4.2, p.z + 9], mira: [p.x, 1.4, p.z + 1], fov: 50 }; }],
+            [(d, P) => W(P, 12) - 0.1, (u) => { const p = quita.position; return { pos: [p.x - 8.5, 4.5, p.z + 8.5], mira: [p.x, 1.2, p.z + 1.5], fov: 50 }; }]],
+    tormenta2: true,
+    act: (u, d, P) => {
+      const zp = 30 - u * 7; pipa.position.set(XC, 0, zp); pipa.visible = u < W(P, 12); rayasHasta(34.4, zp + 4.4);
+      chorros.forEach(([m, k, a]) => { const q = (T * 3 + a) % 1; m.visible = u < W(P, 12); m.position.set(XC + (k - 1) * 2.5 + (a - 0.5) * 0.4, 0.5 - q * 0.4, zp + 4.4 + q * 0.6); });
+      const zq = 26 - Math.max(0, u - W(P, 12)) * 6; quita.position.set(XC + 0.5, 0, zq); quita.visible = u > W(P, 12) - 0.1;
+      const verNieve = u > W(P, 12) - 0.1;
+      capaNieve.visible = verNieve; capaNieve.scale.z = 140; capaNieve.position.set(XC, 0.2, zq - 3.5 - 70);
+      montonPala.forEach((b, i) => { b.visible = verNieve; b.position.set(XC + 0.5 - 1.6 + (i % 3) * 1.3 + Math.sin(T * 8 + i) * 0.1, 0.4 + Math.floor(i / 3) * 0.45, zq - 3.9 - (i % 3) * 0.45); });
+    },
+    fin: () => { chorros.forEach(([m]) => (m.visible = false)); },
+    over: (ctx, u, d, P) => { if (u < W(P, 12)) K.letrero(ctx, 'ANTES', 0.5, 0.15, (u - W(P, 8)) / 0.2, { tam: 200 });
+      else palomita(ctx, 0.5, 0.15, (u - W(P, 17)) / 0.2); },
+  },
+  { // 11. Al otro día, el vecino compró diez bultos de sal.
+    amb: 'invierno',
+    tomas: [[0, u => ({ pos: [5.4 - u * 0.2, 4.6, 4.4 - u * 0.3], mira: [10.4, 2.0, -3.8], fov: 50 })]],
+    act: (u, d, P) => { bultos.visible = true; bultos.children.forEach((b, i) => (b.visible = u > W(P, 5) + i * 0.09)); vecino.malla.position.set(11.8, 0, -3.0); vecino.malla.visible = true; },
+    pj: [[vecino, (u, d) => ({ cara: 'feliz', objeto: 'sal', brazos: [150, 60], codos: [10, 60], salto: Math.abs(Math.sin(T * 7)) * 20 })]],
+    over: (ctx, u, d, P) => K.letrero(ctx, 'x10', 0.5, 0.15, (u - W(P, 6)) / 0.2, { tam: 230 }),
+  },
+  { // 12. Pero esa noche bajó a quince bajo cero.
+    amb: 'noche',
+    tomas: [[0, u => ({ pos: [8.6, 3.2, 0.2 - u * 0.4], mira: [9.3, 2.9, -6.6], fov: 46 })]],
+    act: (u, d) => { colonia('frio'); termoPorche(-4 - 11 * K.suave(u / (d * 0.75))); },
+    fin: () => termoPorche(-15),
+    over: (ctx, u, d) => K.letrero(ctx, '-15 °C', 0.5, 0.15, (u / d - 0.5) / 0.15, { tam: 220, color: '#9fdcff' }),
+  },
+  { // 13. Y ahí la sal ya no sirve: se usa arena.
+    amb: 'noche',
+    tomas: [[0, u => ({ pos: [6.8, 3.6, 3.0 - u * 0.2], mira: [11.2, 1.8, -2.6], fov: 48 })],
+            [(d, P) => W(P, 7) - 0.05, u => ({ pos: [-4.4 - u * 0.2, 3.8, 7.8], mira: [-9.0, 2.0, 0.8], fov: 48 })]],
+    act: (u, d, P) => {
+      vecino.malla.position.set(11.8, 0, -1.2); beto.malla.position.set(-9.6, 0, 1.0);
+      if (u < W(P, 7)) lanzar(cl(u / Math.max(0.5, W(P, 6))), [11.2, 2.6, -1.2], [10.5, 0, 1.5], 0xffffff);
+      else { const p = cl((u - W(P, 8)) / Math.max(0.4, d - W(P, 8))); lanzar(p > 0 && p < 1 ? p : 0, MANO_BETO, [-6, 0, 0.5], 0xa0743a); arenaK = p; }
+    },
+    fin: () => { lanzar(0, MANO_BETO, [0, 0, 0], 0); arenaK = 1; },
+    pj: [[vecino, (u, d, P) => ({ cara: u > W(P, 3) ? 'preocupado' : 'normal', objeto: 'sal', brazos: [90 + Math.sin(T * 14) * 30, 60], codos: [10, 60] })],
+         [beto, (u, d, P) => ({ cara: 'feliz', objeto: 'arena', brazos: [u > W(P, 8) ? 90 + Math.sin(T * 14) * 40 : 15, 60], codos: [10, 60] })]],
+    over: (ctx, u, d, P) => { if (u < W(P, 7)) palomita(ctx, 0.5, 0.15, (u - W(P, 4)) / 0.15, false);
+      else K.letrero(ctx, 'ARENA', 0.5, 0.15, (u - W(P, 8)) / 0.2, { tam: 210 }); },
+  },
+  { // 14. Beto ya tenía arena.
+    amb: 'noche',
+    tomas: [[0, u => ({ pos: [-6.0, 3.6, 13.5 - u * 0.4], mira: [-6.1, 2.4, 1.5], fov: 48 })]],
+    act: (u, d) => { const p = cl((u / d - 0.35) / 0.3);
+      vecino.malla.position.set(-5.0 + p * 0.5, 0, 2.4); beto.malla.position.set(-7.8, 0, 1.4); vecino.malla.rotation.set(0, 0, -K.acelera(p) * 1.4);
+      temblor = p >= 1 && u / d < 0.8 ? 0.6 : 0; },
+    fin: () => vecino.malla.rotation.set(0, 0, 0),
+    pj: [[beto, () => ({ cara: 'feliz', objeto: 'arena', brazos: [150, 60], codos: [10, 60] })],
+         [vecino, (u, d) => ({ cara: u / d > 0.55 ? 'mareado' : 'sorpresa', objeto: 'sal', brazos: [140, 140], codos: [30, 30] })]],
+    over: (ctx, u, d) => { K.letrero(ctx, '¡PUM!', 0.62, 0.15, (u / d - 0.62) / 0.12, { tam: 190 }); palomita(ctx, 0.3, 0.15, (u / d - 0.3) / 0.12); },
+  },
+];
+
+// ===================================================== vida de fondo y clima
+function vida(n, u, dur, t) {
+  const re = Math.round(t * 30) % 3 === 0;
+  const enColonia = !(n >= 7 && n <= 10);
+  gente.forEach((g, i) => { g.malla.visible = enColonia;
+    if (enColonia) g.actualizar(t, camara, { cara: i < 2 ? 'feliz' : (i % 3 ? 'normal' : 'frio'), camina: i >= 4 && i % 2 === 0, brazos: i < 2 ? [120 + Math.sin(t * 6 + i) * 30, 30] : [15, 15], codos: [10, 10], salto: i < 2 ? Math.abs(Math.sin(t * 5 + i)) * 25 : 0 }, re); });
+  gente.forEach((g, i) => { if (i >= 4 && i % 2 === 0) g.malla.position.z += Math.sin(t * 0.3 + i) * 0.01; });
+  mirones.forEach(m => (m.malla.visible = enColonia && n >= 4));
+  humos.forEach(h => h(t, enColonia));
+  humoEscape(t, n === 4);
+  lucesNav.forEach((m, i) => { m.emissive.set(COLORES_LUZ[i]).multiplyScalar(momento === 'manana' ? 0.15 : Math.sin(t * 3 + i * 1.7) > 0 ? 1 : 0.35); });
+}
+function estadoColonia() {
+  const noche = momento !== 'manana';
+  ventMat.color.set(noche ? 0xffe39a : 0x9fc0dc); ventMat.emissive.set(noche ? 0xc89a30 : 0x000000);
+  focoMat.emissive.set(noche ? 0xffc840 : 0x000000); focoMat.color.set(noche ? 0xfff2a0 : 0x9a9a90);
+  nieveCalle.visible = momento === 'noche';
+  hielo.visible = momento !== 'noche';
+  zonaBeto.visible = momento !== 'noche';
+  salSuelo.count = Math.round(700 * salK);
+  arenaSuelo.count = Math.round(900 * arenaK);
+  arenaTinte.forEach(m => (m.material.opacity = 0.85 * arenaK));
+  carambanos.forEach(c => (c.visible = momento !== 'noche'));
+  troca.userData.nieve.forEach(m => (m.visible = momento !== 'manana' || troca.position.x > 9));
+}
+
+// ===================================================== estilo realista
+const lucesCalle = [[-5.4, 5, 0], [5.4, 5, -6], [-5.4, 5, -18], [5.4, 5, 14]].map(([x, y, z]) => { const l = new THREE.PointLight(0xffc070, 0, 26, 1.4); l.position.set(x, y, z); escena.add(l); return l; });
+const luzPorche = new THREE.PointLight(0xffb060, 0, 14, 1.6); luzPorche.position.set(9.5, 4.2, -5); escena.add(luzPorche);
+const luzLab = new THREE.PointLight(0xb0d8ff, 30, 40, 1.2); luzLab.position.set(XL, 12, 10); escena.add(luzLab);
+R.convertir(escena);
+R.neblina(escena, 0x1b2348, 0.012);
+const nieve = R.particulas(escena, 650, 0xffffff, 0.16);
+const nieveFuerte = R.particulas(escena, 900, 0xffffff, 0.2);
+const brillitos = R.particulas(escena, 200, 0xbfe6ff, 0.1);
+const NIEBLA = { noche: [0x1b2348, 0.012], invierno: [0xdde8f4, 0.006], lab: [0x14203c, 0.0] };
+function atmosfera(amb, F, t, tm) {
+  const [c, d] = NIEBLA[amb];
+  escena.fog.color.set(c); escena.fog.density = d;
+  r.gl.toneMappingExposure = amb === 'noche' ? 1.3 : amb === 'lab' ? 1.15 : 1.0;
+  R.enfocar(r, camara.position.distanceTo(new THREE.Vector3(...tm.mira)), 1);
+  nieve(t, camara, amb === 'noche' && !F.tormenta, 0.6);
+  nieveFuerte(t, camara, !!F.tormenta || (!!F.tormenta2 && quita.visible), 1.6);
+  brillitos(t, camara, amb === 'invierno', 0.1);
+  const noche = amb === 'noche';
+  lucesCalle.forEach(l => (l.intensity = noche ? 34 : 0));
+  luzPorche.intensity = noche ? 5 : 0;
+  luzLab.intensity = amb === 'lab' ? 30 : 0;
+}
+
+// ===================================================== cada cuadro
+const P_DE = n => ({ w: k => datos.frases[n].palabras[k] });
+window.cuadro = (t) => {
+  T = t;
+  let n = 0;
+  while (n + 1 < datos.frases.length && t >= datos.frases[n + 1].ini) n++;
+  temblor = 0; destello = 0;
+  for (let i = 0; i <= n; i++) {
+    const F = FRASES[i], ini = datos.frases[i].ini, dur = datos.frases[i].fin - ini;
+    const u = i < n ? dur : t - ini;
+    if (F.act) F.act(u, dur, P_DE(i));
+    if (i < n && F.fin) F.fin();
+    if (i < n) { temblor = 0; destello = 0; }
+  }
+  const F = FRASES[n], ini = datos.frases[n].ini, dur = datos.frases[n].fin - ini, u = t - ini, P = P_DE(n);
+  let ti = 0;
+  const inicioToma = j => (typeof F.tomas[j][0] === 'function' ? F.tomas[j][0](dur, P) : F.tomas[j][0]);
+  while (ti + 1 < F.tomas.length && u >= inicioToma(ti + 1)) ti++;
+  const ut = u - inicioToma(ti);
+  const tm = F.tomas[ti][1](ut, dur, P);
+  const amb = F.amb;
+  K.ambiente(mundo, amb);
+  nocheG.visible = amb === 'noche'; nubes.forEach(c => (c.visible = amb === 'invierno'));
+  luna.position.set(camara.position.x + 250, 220, -800);
+  estadoColonia();
+  const pos = tm.pos.toArray ? tm.pos.toArray() : tm.pos;
+  atmosfera(amb, F, t, { ...tm, pos });
+  const sacude = temblor * 0.35;
+  camara.position.set(pos[0] + Math.sin(t * 91) * sacude, pos[1] + Math.sin(t * 77) * sacude, pos[2]);
+  camara.lookAt(...tm.mira);
+  camara.fov = tm.fov * (1 + 0.08 * (1 - K.frena(ut / 0.25)));
+  camara.updateProjectionMatrix();
+  luz.target.position.set(tm.mira[0], 0, tm.mira[2]);
+  luz.position.copy(luz.target.position).add(luz.userData.offset);
+  luz.target.updateMatrixWorld();
+  ponerMoleculas(t);
+  vida(n, u, dur, t);
+  (F.pj || []).forEach(([pj, est]) => pj.actualizar(t, camara, est(u, dur, P)));
+  if (n !== 14) vecino.malla.rotation.z = 0;
+  r.efecto.render(escena, camara);
+  r.ctx.drawImage(r.gl.domElement, 0, 0);
+  if (F.over) F.over(r.ctx, u, dur, P);
+  K.destello(r.ctx, destello);
+  K.subtitulos(r.ctx, datos.subs, t);
+  return r.salida.toDataURL('image/jpeg', 0.9);
+};
+window.listo = Promise.resolve();
+</script>
+</body>
+</html>

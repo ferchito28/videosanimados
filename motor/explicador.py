@@ -432,6 +432,12 @@ class Explicador(Escena):
     def _armar_subtitulos(self, palabras):
         self.subs = []
         idx = 0
+        if getattr(self, "una_palabra", False):   # estilo "una palabra a la vez"
+            for fr in self.frases:
+                for _ in fr.palabras:
+                    self._agregar_sub([idx], palabras, fr)
+                    idx += 1
+            return
         for fr in self.frases:
             grupo = []
             for p in fr.palabras:

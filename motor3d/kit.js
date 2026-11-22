@@ -357,6 +357,8 @@ const AMBIENTES = {
   noche: { a: '#0b1040', b: '#4a2f7a', luz: 0.45, hemi: 0.55, cHemi: 0x7080ff },
   cuarto: { a: '#0b1040', b: '#4a2f7a', luz: 0.9, hemi: 1.15, cHemi: 0xb0b4ff },
   sueno: { a: '#2a1a6a', b: '#d07ad8', luz: 1.2, hemi: 1.2, cHemi: 0xd8c8ff },
+  invierno: { a: '#6fa6dc', b: '#eef3fa', luz: 1.7, hemi: 1.35, cHemi: 0xe4f0ff },
+  lab: { a: '#14203c', b: '#2c4a7a', luz: 1.3, hemi: 1.3, cHemi: 0xc8dcff },
 };
 export function ambiente(mundo, de, a = de, k = 0) {
   const A = AMBIENTES[de], B = AMBIENTES[a];

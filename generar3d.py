@@ -22,6 +22,7 @@ sys.path.insert(0, RAIZ)
 from escenas.juntas_concreto import JuntasConcreto  # noqa: E402
 from escenas.titanic import Titanic  # noqa: E402
 from escenas.sueno import Sueno  # noqa: E402
+from escenas.sal import Sal  # noqa: E402
 from motor.sonidos import crear_pista  # noqa: E402
 
 # nombre → (clase con el guion y tiempos, página 3D)
@@ -29,6 +30,7 @@ VIDEOS = {
     "juntas_concreto": (JuntasConcreto, "motor3d/escenas/juntas_concreto.html"),
     "titanic": (Titanic, "motor3d/escenas/titanic.html"),
     "sueno": (Sueno, "motor3d/escenas/sueno.html"),
+    "sal": (Sal, "motor3d/escenas/sal.html"),
 }
 
 

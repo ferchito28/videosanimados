@@ -19,6 +19,13 @@ export const VESTUARIOS = {
   campesino: { camisa: '#9a6b42', tunica: true, sombrero: 'capucha', pelo: '#5a3a28' },
   campesina: { saco: '#6f8f4a', vestido: true, delantal: true, sombrero: 'cofia', pelo_largo: '#a0522d' },
   medico: { camisa: '#ffffff', bata: true, sombrero: null, lentes: true, pelo: '#2b2b2b' },
+  // invierno (video de la sal)
+  beto: { saco: '#2f7d5a', abrigo: true, bufanda: '#e23c3c', sombrero: 'gorro_lana', gorro: '#e23c3c', pelo: '#5a3a28' },
+  vecino: { saco: '#f2b51a', abrigo: true, bufanda: '#7a3cbf', sombrero: 'orejeras', orejeras: '#ff6b8a', lentes_sol: true, pelo: '#2b2b2b' },
+  invierno_a: { saco: '#2d6fd6', abrigo: true, bufanda: '#ffd600', sombrero: 'gorro_lana', gorro: '#f4f4f4', pelo: '#6b4b2a' },
+  invierno_b: { saco: '#b04f86', abrigo: true, bufanda: '#ffffff', sombrero: 'gorro_lana', gorro: '#3cbf5a', pelo_largo: '#8a4a2a' },
+  invierno_c: { saco: '#6e4a2c', abrigo: true, bufanda: '#2d6fd6', sombrero: 'orejeras', orejeras: '#ffffff', pelo: '#2b2b2b' },
+  invierno_d: { saco: '#d9483b', abrigo: true, bufanda: '#2b2b2b', sombrero: 'gorro_lana', gorro: '#2d4fa8', pelo_largo: '#3a2a22' },
 };
 
 function contorno(ctx, w = 11) { ctx.lineWidth = w; ctx.strokeStyle = LINEA; ctx.lineJoin = 'round'; ctx.lineCap = 'round'; }
@@ -76,6 +83,10 @@ function cuerpo(ctx, v, tipo) {
     ctx.fillStyle = '#ffffff'; ctx.fillRect(130, 480, 96, 300); ctx.fillRect(286, 480, 104, 300);
     linea(ctx, [[226, 480], [226, 780]], 6); linea(ctx, [[286, 480], [286, 780]], 6);
     ctx.fillStyle = '#d0d0d0'; ctx.fillRect(296, 580, 50, 40);
+  } else if (v.abrigo) {   // chamarra acolchada con cierre
+    ctx.fillStyle = 'rgba(0,0,0,0.13)'; for (let y = 540; y < 780; y += 55) ctx.fillRect(130, y, 260, 9);
+    ctx.fillStyle = 'rgba(255,255,255,0.18)'; for (let y = 505; y < 780; y += 55) ctx.fillRect(130, y, 260, 10);
+    linea(ctx, [[256, 490], [256, 770]], 7, 'rgba(0,0,0,0.45)');
   } else if (tipo === 'pasajera') {
     ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(256, 495, 40, 0, Math.PI); ctx.fill();
     ctx.fillStyle = '#7a2f5a'; ctx.fillRect(150, 660, 220, 26);
@@ -88,6 +99,12 @@ function cuerpo(ctx, v, tipo) {
   if (v.bata) {  // estetoscopio
     ctx.beginPath(); ctx.moveTo(200, 500); ctx.quadraticCurveTo(190, 640, 256, 650); ctx.quadraticCurveTo(320, 640, 312, 500);
     ctx.lineWidth = 9; ctx.strokeStyle = '#333'; ctx.stroke(); elipse(ctx, 256, 660, 18, 18, '#bbbbbb', 6);
+  }
+  if (v.bufanda) {
+    ctx.fillStyle = v.bufanda; contorno(ctx, 9);
+    ctx.beginPath(); ctx.roundRect(286, 500, 46, 130, 12); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.roundRect(186, 468, 140, 52, 24); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,0.35)'; ctx.fillRect(290, 560, 38, 12); ctx.fillRect(290, 590, 38, 12);
   }
   if (v.delantal) { ctx.fillStyle = '#f4f0e6'; ctx.beginPath(); ctx.roundRect(200, 600, 112, 140, 20); ctx.fill(); contorno(ctx, 8); ctx.stroke(); }
   if (tipo === 'jefe') {  // moño
@@ -137,6 +154,11 @@ function cara(ctx, v, est, t) {
     ojos.forEach(([x, y]) => { linea(ctx, [[x - 18, y - 18], [x + 18, y + 18]], 9); linea(ctx, [[x - 18, y + 18], [x + 18, y - 18]], 9); });
   } else {
     ojos.forEach(([x, y]) => elipse(ctx, x, y, 13, 17, LINEA, 0));
+  }
+  if (v.lentes_sol) {   // lentes oscuros de presumido
+    ojos.forEach(([x, y]) => { ctx.beginPath(); ctx.roundRect(x - 46, y - 30, 92, 62, 22); ctx.fillStyle = '#1b1b22'; ctx.fill(); contorno(ctx, 7); ctx.stroke();
+      ctx.fillStyle = 'rgba(255,255,255,0.55)'; ctx.beginPath(); ctx.ellipse(x - 18, y - 12, 14, 7, -0.5, 0, 7); ctx.fill(); });
+    linea(ctx, [[cx - 16, cy - 16], [cx + 16, cy - 16]], 8);
   }
   if (v.lentes) { ojos.forEach(([x, y]) => elipse(ctx, x, y, 40, 36, null, 7)); linea(ctx, [[cx - 22, cy - 12], [cx + 22, cy - 12]], 7); }
   // mejillas
@@ -219,6 +241,16 @@ function sombrero(ctx, v) {
   } else if (v.sombrero === 'cofia') {
     ctx.beginPath(); ctx.ellipse(cx, cy - 110, 175, 90, 0, Math.PI, 0); ctx.closePath(); ctx.fillStyle = '#f4f0e6'; ctx.fill(); contorno(ctx, 10); ctx.stroke();
     for (let i = -3; i <= 3; i++) { ctx.beginPath(); ctx.arc(cx + i * 50, cy - 108, 24, 0, Math.PI); ctx.stroke(); }
+  } else if (v.sombrero === 'gorro_lana') {
+    ctx.beginPath(); ctx.ellipse(cx, cy - 105, 160, 125, 0, Math.PI, 0); ctx.closePath();
+    ctx.fillStyle = v.gorro; ctx.fill(); contorno(ctx, 11); ctx.stroke();
+    ctx.save(); ctx.clip(); ctx.fillStyle = 'rgba(0,0,0,0.12)'; for (let x = cx - 160; x < cx + 160; x += 40) ctx.fillRect(x, cy - 240, 14, 140); ctx.restore();
+    ctx.beginPath(); ctx.roundRect(cx - 172, cy - 128, 344, 52, 22); ctx.fillStyle = '#f4f4f4'; ctx.fill(); ctx.stroke();
+    elipse(ctx, cx, cy - 240, 40, 38, '#f4f4f4', 9);
+  } else if (v.sombrero === 'orejeras') {
+    ctx.beginPath(); ctx.ellipse(cx, cy - 20, 178, 170, 0, Math.PI * 1.08, Math.PI * 1.92); ctx.lineWidth = 34; ctx.strokeStyle = LINEA; ctx.stroke();
+    ctx.lineWidth = 20; ctx.strokeStyle = '#555'; ctx.stroke();
+    [-1, 1].forEach(l => elipse(ctx, cx + l * 168, cy + 5, 52, 60, v.orejeras, 10));
   } else if (v.sombrero === 'gorra') {
     ctx.beginPath(); ctx.ellipse(cx, cy - 110, 150, 95, 0, Math.PI, 0); ctx.closePath();
     ctx.fillStyle = v.gorra; ctx.fill(); contorno(ctx, 11); ctx.stroke();
@@ -255,6 +287,21 @@ function dibujar(ctx, v, tipo, est, t) {
     const f = 1 + Math.sin(t * 20) * 0.12;
     ctx.fillStyle = 'rgba(255,200,60,0.35)'; ctx.beginPath(); ctx.arc(0, -72, 46 * f, 0, 7); ctx.fill();
     ctx.fillStyle = '#ffb300'; ctx.beginPath(); ctx.ellipse(0, -70, 12 * f, 22 * f, 0, 0, 7); ctx.fill();
+    ctx.restore();
+  }
+  if (est.objeto === 'sal' || est.objeto === 'arena') {   // bulto con letrero
+    const sal = est.objeto === 'sal';
+    ctx.save(); ctx.translate(mano[0], mano[1] + 10); ctx.rotate(-0.15);
+    ctx.beginPath(); ctx.roundRect(-58, -40, 116, 140, 18); ctx.fillStyle = sal ? '#f4f4f4' : '#c9a066'; ctx.fill(); contorno(ctx, 8); ctx.stroke();
+    ctx.fillStyle = sal ? '#2d6fd6' : '#7a4b2a'; ctx.fillRect(-50, 0, 100, 50);
+    ctx.fillStyle = '#ffffff'; ctx.font = `${sal ? 44 : 30}px Anton`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(sal ? 'SAL' : 'ARENA', 0, 27);
+    ctx.restore();
+  }
+  if (est.objeto === 'taza') {
+    ctx.save(); ctx.translate(mano[0], mano[1] - 30);
+    ctx.beginPath(); ctx.roundRect(-34, -40, 68, 74, 10); ctx.fillStyle = '#e23c3c'; ctx.fill(); contorno(ctx, 8); ctx.stroke();
+    ctx.beginPath(); ctx.arc(40, -4, 18, -1.2, 1.2); ctx.stroke();
+    ctx.globalAlpha = 0.6; [-14, 12].forEach((x, i) => { const k = (t * 0.8 + i * 0.5) % 1; ctx.beginPath(); ctx.arc(x + Math.sin(t * 4 + i) * 6, -60 - k * 60, 10 + k * 8, 0, 7); ctx.fillStyle = '#ffffff'; ctx.fill(); });
     ctx.restore();
   }
   if (est.objeto === 'celular') {
