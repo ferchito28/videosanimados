@@ -457,3 +457,88 @@ export function camino(a, b, seg = 12, desvio = 0.6, semilla = 1, eje = 'y') {
   }
   return pts;
 }
+
+
+// ---------------------------------------------------- vida extra en escena
+// Gaviotas que vuelan en círculos alrededor de (x, y, z)
+export function gaviotas(escena, x, y, z, n = 6, radio = 18) {
+  const mat = toon(0xffffff), punta = toon(0x333333);
+  const aves = [];
+  for (let i = 0; i < n; i++) {
+    const g = new THREE.Group();
+    const cuerpo = malla(new THREE.CapsuleGeometry(0.18, 0.6, 4, 8), mat, 0, 0, 0, false);
+    cuerpo.rotation.z = Math.PI / 2; g.add(cuerpo);
+    const alas = [-1, 1].map(l => {
+      const piv = new THREE.Group(); piv.position.set(0, 0.05, l * 0.1);
+      const ala = malla(new THREE.BoxGeometry(0.5, 0.05, 1.3), mat, 0, 0, l * 0.65, false);
+      const p2 = malla(new THREE.BoxGeometry(0.3, 0.06, 0.3), punta, 0, 0, l * 1.25, false);
+      piv.add(ala, p2); g.add(piv); return piv;
+    });
+    g.userData = { alas, fase: i * 1.7, r: radio * (0.6 + (i % 3) * 0.2), h: y + (i % 4) * 2.5 };
+    escena.add(g); aves.push(g);
+  }
+  return (t, visible = true) => aves.forEach(g => {
+    g.visible = visible; if (!visible) return;
+    const { alas, fase, r, h } = g.userData, a = t * 0.5 + fase;
+    g.position.set(x + Math.cos(a) * r, h + Math.sin(t * 2 + fase) * 0.6, z + Math.sin(a) * r * 0.6);
+    g.rotation.y = -a;
+    const aleteo = Math.sin(t * 9 + fase) * 0.5;
+    alas[0].rotation.x = aleteo; alas[1].rotation.x = -aleteo;
+  });
+}
+
+// Humo que sale de un punto (en coordenadas del padre)
+export function humo(padre, x, y, z, color = 0x8a8a8a, n = 7) {
+  const mat = sinContorno(toon(color));
+  const bolas = [];
+  for (let i = 0; i < n; i++) { const b = malla(new THREE.SphereGeometry(1, 10, 8), mat, x, y, z, false); padre.add(b); bolas.push(b); }
+  return (t, visible = true) => bolas.forEach((b, i) => {
+    b.visible = visible; if (!visible) return;
+    const k = ((t * 0.35 + i / n) % 1);
+    b.position.set(x - k * 7, y + k * 6, z + Math.sin(i * 3) * k);
+    b.scale.setScalar(0.5 + k * 1.8);
+  });
+}
+
+export function maleta(padre, x, y, z, color = 0x7a4b2a, rot = 0) {
+  const g = new THREE.Group();
+  g.add(malla(new THREE.BoxGeometry(1.3, 0.9, 0.8), toon(color), 0, 0.45, 0));
+  g.add(malla(new THREE.BoxGeometry(1.34, 0.12, 0.84), toon(0x3a2416), 0, 0.6, 0));
+  g.add(malla(new THREE.BoxGeometry(0.12, 0.94, 0.84), toon(0x3a2416), 0.35, 0.45, 0));
+  g.position.set(x, y, z); g.rotation.y = rot; padre.add(g); return g;
+}
+
+export function farol(padre, x, y, z, alto = 4) {
+  const g = new THREE.Group();
+  g.add(malla(new THREE.CylinderGeometry(0.1, 0.14, alto, 8), toon(0x2a2a2e), 0, alto / 2, 0));
+  g.add(malla(new THREE.SphereGeometry(0.35, 12, 8), toon(0xfff2a0, { emissive: 0xffc840, emissiveIntensity: 0.9 }), 0, alto + 0.2, 0));
+  g.position.set(x, y, z); padre.add(g); return g;
+}
+
+// Guirnalda de banderitas entre dos puntos
+export function banderitas(padre, a, b, n = 14) {
+  const colores = [0xe23c3c, 0xffffff, 0x2d6fd6, 0xffd600];
+  const A = new THREE.Vector3(...a), B = new THREE.Vector3(...b);
+  for (let i = 0; i < n; i++) {
+    const k = (i + 0.5) / n;
+    const p = A.clone().lerp(B, k); p.y -= Math.sin(k * Math.PI) * 0.8;
+    const f = malla(new THREE.ConeGeometry(0.25, 0.6, 3), toon(colores[i % 4]), p.x, p.y - 0.3, p.z, false);
+    f.rotation.z = Math.PI; padre.add(f);
+  }
+  const cuerda = malla(new THREE.CylinderGeometry(0.02, 0.02, A.distanceTo(B), 4), toon(0x333333), 0, 0, 0, false);
+  cuerda.position.copy(A).add(B).multiplyScalar(0.5); cuerda.position.y -= 0.5;
+  cuerda.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), B.clone().sub(A).normalize());
+  padre.add(cuerda);
+}
+
+// Letrero con texto pintado (canvas)
+export function cartel(padre, texto, x, y, z, ancho = 8, alto = 1.6, fondo = '#b3202c', color = '#ffffff') {
+  const c = document.createElement('canvas'); c.width = 1024; c.height = Math.round(1024 * alto / ancho);
+  const ctx = c.getContext('2d'); ctx.fillStyle = fondo; ctx.fillRect(0, 0, c.width, c.height);
+  ctx.strokeStyle = '#1b1210'; ctx.lineWidth = 16; ctx.strokeRect(8, 8, c.width - 16, c.height - 16);
+  ctx.fillStyle = color; ctx.font = `${Math.round(c.height * 0.62)}px Anton`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(texto, c.width / 2, c.height / 2 + 4);
+  const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(ancho, alto), sinContorno(new THREE.MeshBasicMaterial({ map: tex, side: THREE.DoubleSide })));
+  m.position.set(x, y, z); padre.add(m); return m;
+}

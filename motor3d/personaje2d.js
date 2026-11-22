@@ -229,11 +229,13 @@ function dibujar(ctx, v, tipo, est, t) {
 }
 
 export class Personaje2D {
-  constructor(tipo = 'obrero', alto = 4.4) {
+  // calidad < 1 usa un canvas más chico (para gente de fondo: mucho más rápido)
+  constructor(tipo = 'obrero', alto = 4.4, calidad = 1) {
     this.tipo = tipo;
     this.v = VESTUARIOS[tipo];
+    this.q = calidad;
     this.canvas = document.createElement('canvas');
-    this.canvas.width = W; this.canvas.height = H;
+    this.canvas.width = Math.round(W * calidad); this.canvas.height = Math.round(H * calidad);
     this.ctx = this.canvas.getContext('2d');
     this.tex = new THREE.CanvasTexture(this.canvas);
     this.tex.colorSpace = THREE.SRGBColorSpace;
@@ -247,14 +249,21 @@ export class Personaje2D {
     this.malla.customDepthMaterial = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, map: this.tex, alphaTest: 0.4 });
     this.estado = { cara: 'normal', brazos: [15, 15], semilla: Math.random() * 10 };
   }
-  agregar(escena, x, z) { this.malla.position.set(x, 0, z); escena.add(this.malla); return this; }
-  actualizar(t, camara, cambios = {}) {
+  agregar(escena, x, z, y = 0) { this.malla.position.set(x, y, z); escena.add(this.malla); return this; }
+  // redibujar = false solo voltea hacia la cámara (para gente de fondo, ahorra tiempo)
+  actualizar(t, camara, cambios = {}, redibujar = true) {
     Object.assign(this.estado, cambios);
-    dibujar(this.ctx, this.v, this.tipo, this.estado, t);
-    this.tex.needsUpdate = true;
+    if (redibujar || !this._listo) {
+      this.ctx.setTransform(this.q, 0, 0, this.q, 0, 0);
+      dibujar(this.ctx, this.v, this.tipo, this.estado, t);
+      this.tex.needsUpdate = true;
+      this._listo = true;
+    }
     // siempre de frente a la cámara (solo gira en el eje vertical)
-    const p = this.malla.position;
-    this.malla.rotation.y = Math.atan2(camara.position.x - p.x, camara.position.z - p.z);
+    const p = this.malla.getWorldPosition(new THREE.Vector3());
+    const padre = this.malla.parent ? this.malla.parent.getWorldQuaternion(new THREE.Quaternion()) : null;
+    const giroPadre = padre ? new THREE.Euler().setFromQuaternion(padre, 'YXZ').y : 0;
+    this.malla.rotation.y = Math.atan2(camara.position.x - p.x, camara.position.z - p.z) - giroPadre;
     this.malla.scale.x = this.estado.voltear ? -1 : 1;
   }
 }
