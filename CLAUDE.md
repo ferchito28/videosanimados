@@ -75,7 +75,15 @@ python generar3d.py juntas_concreto --voz ... --cuadros 2,10.5  # revisar cuadro
   `FRASES` define por frase el ambiente, las tomas de cámara, `act` (animación),
   `pj` (personajes) y `over` (letreros). Los tiempos los manda `generar3d.py`
   (misma `Frase` de `escenas/<video>.py`, alineada con la voz).
-- Un video de 60 s tarda ~12 min. Revisa primero con `--cuadros`.
+- **Estilo visual que pide el usuario: escenas LLENAS.** Nada de fondos vacíos.
+  Cada escena debe tener mucha gente (multitudes de fondo con
+  `new Personaje2D(tipo, alto, 0.4)` y `actualizar(..., redibujar)` cada 3 cuadros),
+  edificios, objetos y vida: gaviotas (`K.gaviotas`), humo (`K.humo`), maletas,
+  faroles, banderitas, letreros (`K.cartel`, crearlos después de `cargarFuente`),
+  cajas, vehículos, espuma, etc. Referencia de lo que le gustó: `motor3d/escenas/titanic.html`.
+- Tragedias reales: el humor va en el narrador, nunca en las víctimas; no mostrar
+  gente muriendo.
+- Un video de 60 s tarda ~12-15 min. Revisa primero con `--cuadros`.
 - La pantalla es vertical: el campo de visión horizontal es angosto, aleja la
   cámara para que quepan los objetos.
 
