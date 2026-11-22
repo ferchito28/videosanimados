@@ -1,0 +1,414 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Titanic 3D</title>
+<script type="importmap">
+{ "imports": {
+    "three": "/motor3d/node_modules/three/build/three.module.js",
+    "three/addons/": "/motor3d/node_modules/three/examples/jsm/"
+} }
+</script>
+<style>body{margin:0;background:#000}</style>
+</head>
+<body>
+<script type="module">
+// ¿Por qué se hundió el Titanic, si era insumergible? — versión 3D.
+import * as THREE from 'three';
+import * as K from '/motor3d/kit.js';
+import { Personaje2D } from '/motor3d/personaje2d.js';
+
+const datos = await (await fetch(new URLSearchParams(location.search).get('datos'))).json();
+window.DURACION = datos.duracion;
+
+const r = K.crearRender();
+const { escena, camara } = r;
+const cielo = K.cielo(escena, '#3f96ea', '#ffe0b0');
+const luz = K.luces(escena, [35, 55, 25]);
+const mundo = { cielo, luz, hemi: luz.userData.hemi };
+const solG = K.sol(escena, 300, 190, -900, 40);
+const nubes = [K.nube(escena, -90, 110, -500, 2.2), K.nube(escena, 300, 140, -650, 2.8), K.nube(escena, 700, 150, -700, 2.4), K.nube(escena, 1100, 130, -600, 2.6)];
+// luna y estrellas (solo de noche)
+const nocheG = new THREE.Group(); escena.add(nocheG);
+nocheG.add(new THREE.Mesh(new THREE.SphereGeometry(30, 24, 16), K.sinContorno(new THREE.MeshBasicMaterial({ color: 0xfff6d0 }))));
+nocheG.children[0].position.set(250, 220, -800);
+const estrellaMat = K.sinContorno(new THREE.MeshBasicMaterial({ color: 0xffffff }));
+for (let i = 0; i < 160; i++) {
+  const s = new THREE.Mesh(new THREE.SphereGeometry(1.2 + (i % 3) * 0.6, 6, 4), estrellaMat);
+  const a = (i * 137.5) * Math.PI / 180, e = 0.12 + ((i * 53) % 100) / 100 * 0.9;
+  s.position.set(600 + Math.cos(a) * 1000 * Math.cos(e), 1000 * Math.sin(e), -Math.abs(Math.sin(a)) * 1000 * Math.cos(e) - 100);
+  nocheG.add(s);
+}
+
+// mar
+const MAR = K.sinContorno(K.toon(0x2c6fb5));
+const mar = K.malla(new THREE.PlaneGeometry(4000, 4000), MAR, 600, 0, 0, false);
+mar.rotation.x = -Math.PI / 2; escena.add(mar);
+const espumaMat = K.sinContorno(K.toon(0xdff1ff));
+
+const caja = (w, h, d, mat, x, y, z, padre = escena) => { const m = K.malla(new THREE.BoxGeometry(w, h, d), mat, x, y, z); padre.add(m); return m; };
+const cl = x => Math.min(1, Math.max(0, x));
+const lerp = (a, b, k) => a.map((v, i) => v + (b[i] - v) * k);
+
+// ============================================================ EL TITANIC
+function casco(forma, alto, mat) {
+  const geo = new THREE.ExtrudeGeometry(forma, { depth: alto, bevelEnabled: false });
+  geo.rotateX(-Math.PI / 2);
+  return new THREE.Mesh(geo, mat);
+}
+function barco() {
+  const g = new THREE.Group();
+  const f = new THREE.Shape();
+  f.moveTo(-28, -3); f.lineTo(18, -3); f.quadraticCurveTo(26, -2.4, 31, 0); f.quadraticCurveTo(26, 2.4, 18, 3);
+  f.lineTo(-28, 3); f.quadraticCurveTo(-31, 0, -28, -3);
+  const rojo = casco(f, 2.8, K.toon(0xa8322d)); rojo.position.y = -2.5;
+  const negro = casco(f, 3.7, K.toon(0x1c1c22)); negro.position.y = 0.3;
+  [rojo, negro].forEach(m => { m.castShadow = m.receiveShadow = true; g.add(m); });
+  const blanco = K.toon(0xf4f1ea), madera = K.toon(0xc79a62);
+  caja(48, 0.12, 5.9, madera, -4, 4.06, 0, g);
+  caja(34, 2.3, 5, blanco, -3, 5.2, 0, g);
+  caja(26, 1.6, 4.2, blanco, -4, 7.1, 0, g);
+  caja(4, 1.2, 4.6, blanco, 13.5, 7.0, 0, g);  // puente de mando
+  const chimenea = K.toon(0xd9902f), negroC = K.toon(0x1a1a1a);
+  [9, 2.5, -4, -10.5].forEach(x => {
+    const c = new THREE.Group();
+    c.add(K.malla(new THREE.CylinderGeometry(1.15, 1.25, 6, 20), chimenea, 0, 3, 0));
+    c.add(K.malla(new THREE.CylinderGeometry(1.17, 1.17, 1.3, 20), negroC, 0, 5.4, 0));
+    c.position.set(x, 7.9, 0); c.rotation.z = 0.12; g.add(c);
+  });
+  [24, -24].forEach(x => { const m = K.malla(new THREE.CylinderGeometry(0.12, 0.15, 14, 8), K.toon(0x8a6a44), x, 11, 0); m.rotation.z = 0.08; g.add(m); });
+  // ojos de buey (brillan de noche)
+  const ojoMat = K.sinContorno(new THREE.MeshToonMaterial({ color: 0x6b6b5a, emissive: 0x000000 }));
+  for (let lado of [-1, 1]) for (let fila of [1.6, 2.8]) for (let x = -26; x <= 16; x += 1.6)
+    g.add(K.malla(new THREE.BoxGeometry(0.35, 0.35, 0.05), ojoMat, x, fila, lado * 3.02, false));
+  for (let lado of [-1, 1]) for (let x = -17; x <= 9; x += 2) for (let piso of [5.0, 6.9]) {
+    if (piso > 6 && (x < -15 || x > 7)) continue;
+    g.add(K.malla(new THREE.BoxGeometry(0.6, 0.45, 0.05), ojoMat, x, piso, lado * (piso > 6 ? 2.12 : 2.52), false));
+  }
+  // botes salvavidas en cubierta
+  const bote = K.toon(0xffffff);
+  for (let lado of [-1, 1]) for (let x = -18; x <= 6; x += 3.2) caja(2.2, 0.5, 0.8, bote, x, 8.15, lado * 2.6, g);
+  g.userData.ojoMat = ojoMat;
+  return g;
+}
+const titanic = barco(); escena.add(titanic);
+const XS = 0;
+// muelle de 1912
+const muelle = new THREE.Group(); escena.add(muelle);
+caja(70, 1.6, 10, K.toon(0x9a6b42), 0, 0.8, -12, muelle);
+for (let x = -30; x <= 30; x += 6) caja(0.6, 3, 0.6, K.toon(0x6e4628), x, 0.2, -7.2, muelle);
+const gente1912 = [['pasajera', -4], ['pasajero', -1], ['jefe', 2.2], ['marinero', 5.2], ['capitan', 8.4]]
+  .map(([tipo, x]) => { const p = new Personaje2D(tipo, 4.4).agregar(escena, x, -12); p.malla.position.y = 1.6; return p; });
+// iceberg
+const iceberg = new THREE.Group(); escena.add(iceberg);
+const hielo = K.toon(0xeaf6ff, { flatShading: true }), hieloSombra = K.toon(0xbfe3f7, { flatShading: true });
+[[0, 4, 0, 7], [4, 2, 2, 5], [-4, 2.5, -1, 5.5], [1, 9, 0, 4], [-2, 1, 4, 4], [5, 1, -3, 4]].forEach(([x, y, z, rr], i) => {
+  const m = K.malla(new THREE.IcosahedronGeometry(rr, 0), i % 2 ? hieloSombra : hielo, x, y, z);
+  m.rotation.set(i, i * 2, i * 0.5); iceberg.add(m);
+});
+iceberg.visible = false;
+const burbujas = [];
+for (let i = 0; i < 14; i++) { const b = K.malla(new THREE.SphereGeometry(0.6, 10, 8), espumaMat, 0, 0.1, 0, false); b.visible = false; escena.add(b); burbujas.push(b); }
+
+// ===================================================== CORTE: 16 COMPARTIMENTOS (x = 300)
+const XC = 300, LC = 48, HC = 12, NC = 16, ANC = LC / NC, TOPE = 7.2;
+const corte = new THREE.Group(); corte.position.set(XC - LC / 2, 1.0, 0); escena.add(corte);
+const pivoteCorte = new THREE.Group(); corte.add(pivoteCorte);  // gira sobre la popa
+const acero = K.toon(0x8f96a3), casco2 = K.toon(0x1c1c22), interior = K.toon(0x8a7464);
+caja(LC, HC, 0.3, interior, LC / 2, HC / 2, -3, pivoteCorte);               // pared del fondo
+caja(LC + 1, 0.6, 6.4, casco2, LC / 2, -0.3, 0, pivoteCorte);              // fondo del casco
+caja(LC + 1, 0.4, 6.4, K.toon(0xc79a62), LC / 2, HC + 0.2, 0, pivoteCorte); // cubierta de arriba
+caja(0.6, HC + 0.8, 6.4, casco2, -0.3, HC / 2, 0, pivoteCorte);            // popa
+const proa = caja(0.6, HC + 1.6, 6.4, casco2, LC + 0.8, HC / 2, 0, pivoteCorte); proa.rotation.z = -0.25;
+// pisos intermedios que sí llegan de lado a lado (para que se vea que arriba hay paso)
+caja(LC, 0.15, 6, K.toon(0x6b5a4e), LC / 2, TOPE + 2.4, -0.2, pivoteCorte).visible = true;
+const mamparoMat = new THREE.MeshToonMaterial({ color: 0x8f96a3, emissive: 0x000000 });
+const mamparos = [];
+for (let i = 1; i < NC; i++) mamparos.push(caja(0.35, TOPE, 6, mamparoMat, i * ANC, TOPE / 2, 0, pivoteCorte));
+const aguaMat = K.sinContorno(new THREE.MeshToonMaterial({ color: 0x2f86e8, transparent: true, opacity: 0.82 }));
+const aguas = [];
+for (let i = 0; i < NC; i++) {
+  const geo = new THREE.BoxGeometry(ANC - 0.4, 1, 5.6); geo.translate(0, 0.5, 0);
+  const m = new THREE.Mesh(geo, aguaMat); m.position.set(i * ANC + ANC / 2, 0.05, 0); m.scale.y = 0.001;
+  pivoteCorte.add(m); aguas.push(m);
+}
+// el compartimento 1 es el de la proa (x mayor)
+const aguaDe = n => aguas[NC - n];
+const cascadas = [];
+for (let i = 1; i < NC; i++) {
+  const m = K.malla(new THREE.BoxGeometry(0.5, 1, 5.4), aguaMat, i * ANC - 0.45, 0, 0, false); m.visible = false;
+  pivoteCorte.add(m); cascadas.push(m);
+}
+const puertaMat = K.toon(0xd23b3b);
+const puertas = mamparos.map(mp => caja(0.5, 2.2, 1.6, puertaMat, mp.position.x, 1.1 + 2.4, 1.2, pivoteCorte));
+const raspon = K.grieta(pivoteCorte, K.camino([LC - 1, 0.1, 3.3], [LC - 5 * ANC + 0.5, 0.1, 3.3], 10, 0.0, 4), 0.35, 0.5, 0xff3b3b);
+const flechaTope = K.flecha3d(0xffd600); flechaTope.rotation.z = Math.PI; flechaTope.visible = false; pivoteCorte.add(flechaTope);
+const capitanC = new Personaje2D('capitan', 5).agregar(escena, XC + 6, 9);
+
+function llenar(n, nivel) { const a = aguaDe(n); a.scale.y = Math.max(0.001, nivel); }
+
+// ===================================================== CHAROLA DE HIELOS (x = 600)
+const XT = 600;
+caja(60, 0.4, 60, K.toon(0xe8d9c0), XT, 0.2, 0);
+const pared = caja(60, 30, 0.5, K.toon(0xbfe6f0), XT, 15, -9);
+for (let i = -30; i <= 30; i += 3) caja(0.12, 30, 0.1, K.sinContorno(K.toon(0xffffff)), XT + i, 15, -8.7);
+for (let j = 0; j <= 30; j += 3) caja(60, 0.12, 0.1, K.sinContorno(K.toon(0xffffff)), XT, j, -8.7);
+caja(16, 0.6, 7, K.toon(0x9a6b42), XT, 4.5, 0);
+[[-7, -3], [7, -3], [-7, 3], [7, 3]].forEach(([a, b]) => caja(0.5, 4.2, 0.5, K.toon(0x6e4628), XT + a, 2.1, b));
+const charola = new THREE.Group(); charola.position.set(XT - 5, 4.8, 0); escena.add(charola);
+const plastico = K.toon(0xf7f7ff);
+caja(10, 0.3, 3, plastico, 5, 0.15, 0, charola);
+for (let i = 0; i <= 8; i++) caja(0.18, 1.0, 3, plastico, i * 1.25, 0.65, 0, charola);
+[-1.45, 0, 1.45].forEach(z => caja(10, 1.0, 0.12, plastico, 5, 0.65, z, charola));
+const aguasT = [];
+for (let i = 0; i < 8; i++) for (let fila of [-0.72, 0.72]) {
+  const geo = new THREE.BoxGeometry(1.05, 1, 1.3); geo.translate(0, 0.5, 0);
+  const m = new THREE.Mesh(geo, aguaMat); m.position.set(i * 1.25 + 0.625, 0.3, fila); m.scale.y = 0.001;
+  charola.add(m); aguasT.push([i, m]);
+}
+const llave = new THREE.Group(); escena.add(llave);
+caja(0.5, 6, 0.5, K.toon(0xb8bcc6), XT - 5.8, 9.5, -1, llave);
+caja(2.2, 0.5, 0.5, K.toon(0xb8bcc6), XT - 4.9, 12.3, -1, llave);
+const chorro = caja(0.35, 5.5, 0.35, aguaMat, XT - 3.9, 9.5, -1, llave);
+const pasajeraT = new Personaje2D('pasajera', 4.6).agregar(escena, XT + 9.5, 3);
+
+// ===================================================== BOTES PARA LA MITAD (x = 900)
+const XB = 900;
+caja(40, 1, 16, K.toon(0xc79a62), XB, 3, 0);
+caja(40, 7, 15, K.toon(0x1c1c22), XB, -0.5, 0);
+for (let x = -19; x <= 19; x += 1.2) caja(0.12, 1.4, 0.12, K.toon(0xf4f1ea), XB + x, 4.2, 7.6);
+caja(40, 0.15, 0.15, K.toon(0xf4f1ea), XB, 4.9, 7.6);
+function bote(x, z, color = 0xffffff, padre = escena) {
+  const g = new THREE.Group();
+  const casco3 = K.malla(new THREE.SphereGeometry(1, 20, 12, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2), K.toon(color), 0, 0.9, 0);
+  casco3.scale.set(2.6, 0.9, 1.0); g.add(casco3);
+  caja(4.6, 0.12, 1.6, K.toon(0x8a5a35), 0, 0.85, 0, g);
+  g.position.set(x, 0, z); padre.add(g); return g;
+}
+bote(XB - 8, -4).position.y = 5.2;
+bote(XB + 8, -4).position.y = 5.2;
+[-8, 8].forEach(x => [-1.8, 1.8].forEach(dx => caja(0.25, 4.5, 0.25, K.toon(0x55555c), XB + x + dx, 5.7, -4)));
+const multitud = [['pasajero', -9, 1], ['pasajera', -6, 2.5], ['jefe', -3, 0.5], ['marinero', 0, 2.5], ['pasajera', 3, 0.8],
+                  ['pasajero', 6, 2.5], ['capitan', 9, 1], ['pasajero', -12, 3.5], ['pasajera', 12, 3.2]]
+  .map(([tipo, x, z]) => { const p = new Personaje2D(tipo, 4.2).agregar(escena, XB + x, z); p.malla.position.y = 3.5; return p; });
+
+// ===================================================== BARCO MODERNO CON BOTES PARA TODOS (x = 1200)
+const XM = 1200;
+const moderno = new THREE.Group(); moderno.position.set(XM, 0, -14); escena.add(moderno);
+caja(60, 7, 9, K.toon(0xffffff), 0, 1.5, 0, moderno);
+caja(48, 4, 8, K.toon(0xf0f4ff), -2, 6.8, 0, moderno);
+caja(36, 3, 7, K.toon(0xffffff), -4, 10.3, 0, moderno);
+caja(4, 4, 4, K.toon(0x2d4fa8), -14, 14, 0, moderno);
+for (let x = -26; x <= 22; x += 4) bote(x, 4.4, 0xff7a1a, moderno).position.y = 4.8;
+for (let x = -24; x <= 20; x += 4) bote(x, 4.0, 0xff7a1a, moderno).position.y = 8.6;
+caja(30, 1.6, 10, K.toon(0x9a6b42), XM, 0.8, 2);
+const capitanM = new Personaje2D('capitan', 4.8).agregar(escena, XM + 1, 3); capitanM.malla.position.y = 1.6;
+const marineroM = new Personaje2D('marinero', 4.4).agregar(escena, XM - 3, 4); marineroM.malla.position.y = 1.6;
+
+// ===================================================== ayudas
+let temblor = 0, destello = 0;
+function palomita(ctx, x, y, prog, ok = true) {
+  if (prog <= 0) return;
+  const k = K.rebote(Math.min(1, prog)) * 95, X = x * K.ANCHO, Y = y * K.ALTO;
+  ctx.save(); ctx.beginPath(); ctx.arc(X, Y, k, 0, 7);
+  ctx.fillStyle = ok ? '#3cbf5a' : '#e23c3c'; ctx.fill(); ctx.lineWidth = 12; ctx.strokeStyle = '#1b1210'; ctx.stroke();
+  ctx.lineWidth = k * 0.22; ctx.strokeStyle = '#fff'; ctx.lineCap = 'round'; ctx.beginPath();
+  if (ok) { ctx.moveTo(X - k * 0.45, Y); ctx.lineTo(X - k * 0.1, Y + k * 0.35); ctx.lineTo(X + k * 0.5, Y - k * 0.35); }
+  else { ctx.moveTo(X - k * 0.4, Y - k * 0.4); ctx.lineTo(X + k * 0.4, Y + k * 0.4); ctx.moveTo(X - k * 0.4, Y + k * 0.4); ctx.lineTo(X + k * 0.4, Y - k * 0.4); }
+  ctx.stroke(); ctx.restore();
+}
+// posición del barco: navegando = avanza en x (la cámara lo sigue)
+function navegar(x, hundir = 0, inclina = 0) {
+  titanic.position.set(x, -hundir, 0); titanic.rotation.z = -inclina;
+}
+// tomas que miran al corte (coordenadas locales del corte)
+const enCorte = (x, y, z) => [XC - LC / 2 + x, 1 + y, z];
+function estadoCorte({ niveles = [], puertasK = 0, gira = 0, cascada = [] } = {}) {
+  for (let n = 1; n <= NC; n++) llenar(n, niveles[n - 1] || 0);
+  puertas.forEach(p => { p.position.y = 3.5 + 2.6 * (1 - puertasK); p.visible = puertasK > 0; });
+  pivoteCorte.rotation.z = -gira;
+  cascadas.forEach((c, i) => { c.visible = false; });
+  cascada.forEach(([n, k]) => { // agua cayendo del compartimento n al n+1 (hacia la popa)
+    if (k <= 0 || k >= 1) return;
+    const c = cascadas[NC - n - 1]; c.visible = true;
+    c.scale.y = TOPE; c.position.y = TOPE / 2;
+  });
+}
+
+// ============================================================== LAS FRASES
+const FRASES = [
+  { // 0. ¿Por qué se hundió el Titanic, si era insumergible?
+    amb: ['dia'],
+    tomas: [[0, (u, d) => { const k = K.suave(u / d); const x = titanic.position.x;
+      return { pos: lerp([x + 70, 22, 40], [x + 20, 9, 36], k), mira: [x, 4, 0], fov: 44 }; }]],
+    act: u => { navegar(-10 + u * 3); muelle.visible = false; gente1912.forEach(p => (p.malla.visible = false)); },
+  },
+  { // 1. En 1912, todos decían que el Titanic prácticamente no se podía hundir.
+    amb: ['dia'],
+    tomas: [[0, u => ({ pos: [3 + u * 0.3, 4.6, -27], mira: [2, 4, -12], fov: 44 })],
+            [(d) => d * 0.55, u => ({ pos: [-26 + u, 3.5, -22], mira: [10, 8, 0], fov: 46 })]],
+    act: () => { navegar(0); muelle.visible = true; gente1912.forEach(p => (p.malla.visible = true)); },
+    fin: () => { muelle.visible = false; gente1912.forEach(p => (p.malla.visible = false)); },
+    pj: gente1912.map((p, i) => [p, u => ({ cara: 'feliz', brazos: i % 2 ? [150, 150] : [15, 150], codos: [10, 10], habla: i === 4 })]),
+    over: (ctx, u) => K.letrero(ctx, '1912', 0.5, 0.2, u / 0.35, { tam: 200 }),
+  },
+  { // 2. ¿Su secreto? Dieciséis compartimentos separados por paredes de acero, llamadas mamparos.
+    amb: ['dia'],
+    tomas: [[0, (u, d) => ({ pos: enCorte(LC + 14 - u * 1.5, 16, 24), mira: enCorte(LC / 2 - 2, 4, 0), fov: 48 })],
+            [(d, P) => P.w(10) - 0.1, u => ({ pos: enCorte(30 + u * 1.5, 5, 16), mira: enCorte(24, 4, 0), fov: 46 })]],
+    act: (u, d, P) => { estadoCorte();
+      const b = K.suave((u - P.w(10)) / 0.3) * (0.6 + 0.4 * Math.sin(T * 12));
+      mamparoMat.color.set(0x8f96a3).lerp(new THREE.Color(0xffd600), b); mamparoMat.emissive.set(0).lerp(new THREE.Color(0x806800), b); },
+    fin: () => { mamparoMat.color.set(0x8f96a3); mamparoMat.emissive.set(0); },
+    over: (ctx, u, d, P) => K.letrero(ctx, '16', 0.5, 0.2, (u - P.w(2)) / 0.3, { tam: 240 }),
+  },
+  { // 3. Si entraba agua en uno, las puertas se cerraban y el agua se quedaba atrapada ahí.
+    amb: ['dia'],
+    tomas: [[0, u => ({ pos: enCorte(LC + 2 - u * 0.4, 12, 17), mira: enCorte(LC - 8, 3, 0), fov: 46 })]],
+    act: (u, d) => { const p = u / d; estadoCorte({ niveles: [5.5 * K.frena(p / 0.5)], puertasK: K.suave((p - 0.35) / 0.25) }); },
+    over: (ctx, u, d) => palomita(ctx, 0.5, 0.22, (u / d - 0.75) / 0.12),
+  },
+  { // 4. Podía flotar hasta con cuatro compartimentos inundados.
+    amb: ['dia'],
+    tomas: [[0, u => ({ pos: enCorte(LC + 8 - u * 0.6, 14, 22), mira: enCorte(LC - 10, 3.5, 0), fov: 48 })]],
+    act: (u, d) => { const p = u / d; estadoCorte({ niveles: [5.5, 5.5 * K.frena(p / 0.3), 5.5 * K.frena((p - 0.15) / 0.3), 5.5 * K.frena((p - 0.3) / 0.3)], puertasK: 1 });
+      corte.position.y = 1 + Math.sin(T * 2) * 0.25; },
+    fin: () => { corte.position.y = 1; },
+    over: (ctx, u, d) => { K.letrero(ctx, '4', 0.38, 0.2, (u / d - 0.2) / 0.2, { tam: 240 }); palomita(ctx, 0.62, 0.2, (u / d - 0.6) / 0.15); },
+  },
+  { // 5. Pero la noche del catorce de abril... ¡pum! Un iceberg.
+    amb: ['noche'],
+    tomas: [[0, u => { const x = titanic.position.x; return { pos: [x - 60, 16, 46], mira: [x + 10, 4, 0], fov: 44 }; }],
+            [(d, P) => P.w(7) - 0.15, u => ({ pos: [titanic.position.x + 40, 5, 22], mira: [titanic.position.x + 26, 4, 3], fov: 48 })]],
+    act: (u, d, P) => { const t0 = P.w(7); navegar(-30 + u * 4); iceberg.visible = true;
+      iceberg.position.set(titanic.position.x + 34 - Math.max(0, u - t0) * 3, 0, 7.5 - 4 * K.frena(cl(u / t0)) );
+      titanic.userData.ojoMat.emissive.set(0xffd27a); titanic.userData.ojoMat.color.set(0xffe9a0);
+      temblor = u >= t0 && u < t0 + 0.6 ? 1 - (u - t0) / 0.6 : 0; destello = u >= t0 && u < t0 + 0.12 ? 0.6 : 0; },
+    over: (ctx, u, d, P) => { if (u < P.w(7)) K.letrero(ctx, '14 ABRIL 1912', 0.5, 0.2, u / 0.35, { tam: 130, color: '#ffffff', giro: 0 });
+                              K.letrero(ctx, '¡PUM!', 0.5, 0.22, (u - P.w(7)) / 0.3, { tam: 230, giro: 0.1 }); },
+  },
+  { // 6. El golpe abrió cinco compartimentos.
+    amb: ['dia'],
+    tomas: [[0, u => ({ pos: enCorte(LC + 8 - u * 0.6, 14, 22), mira: enCorte(LC - 10, 3, 0), fov: 48 })]],
+    act: (u, d) => { const p = u / d; raspon(p / 0.35);
+      estadoCorte({ niveles: [1, 2, 3, 4, 5].map(i => 4 * K.frena((p - 0.25 - i * 0.05) / 0.5)), puertasK: 1 }); },
+    over: (ctx, u, d) => K.letrero(ctx, '5', 0.5, 0.2, (u / d - 0.3) / 0.2, { tam: 260, color: '#ff5050' }),
+  },
+  { // 7. Uno más de lo que aguantaba.
+    amb: ['dia'],
+    tomas: [[0, u => ({ pos: [XC + 7.5, 4.4, 17 - u * 0.5], mira: [XC + 6, 4.2, 9], fov: 42 })]],
+    act: () => { estadoCorte({ niveles: [4, 4, 4, 4, 4], puertasK: 1 }); raspon(1); },
+    pj: [[capitanC, () => ({ cara: 'preocupado', brazos: [60, 60], codos: [100, 100], habla: true })]],
+    over: (ctx, u, d) => { K.letrero(ctx, '5 > 4', 0.5, 0.2, u / 0.3, { tam: 200, color: '#ff5050', giro: 0 }); palomita(ctx, 0.5, 0.34, (u / d - 0.4) / 0.15, false); },
+  },
+  { // 8. Y aquí viene lo peor: los mamparos no llegaban hasta arriba.
+    amb: ['dia'],
+    tomas: [[0, u => ({ pos: enCorte(LC - 8 - u * 0.5, 9.5, 19), mira: enCorte(LC - 13, 7.5, 0), fov: 46 })]],
+    act: (u, d) => { estadoCorte({ niveles: [4, 4, 4, 4, 4], puertasK: 1 });
+      flechaTope.visible = u / d > 0.45; flechaTope.position.set(LC - 4 * ANC, TOPE + 3.6 + Math.sin(T * 8) * 0.3, 1);
+      const b = K.suave((u / d - 0.45) / 0.15) * (0.6 + 0.4 * Math.sin(T * 12));
+      mamparoMat.color.set(0x8f96a3).lerp(new THREE.Color(0xffd600), b); mamparoMat.emissive.set(0).lerp(new THREE.Color(0x806800), b); },
+    fin: () => { flechaTope.visible = false; mamparoMat.color.set(0x8f96a3); mamparoMat.emissive.set(0); },
+  },
+  { // 9. Eran como una charola de hielos.
+    amb: ['dia'],
+    tomas: [[0, u => ({ pos: [XT + 2 + u * 0.4, 13, 19 - u], mira: [XT, 5.5, 0], fov: 44 })]],
+    act: (u, d) => { const p = u / d; charola.rotation.z = 0.12;
+      chorro.visible = true;
+      aguasT.forEach(([i, m]) => { const celda = 7 - i; m.scale.y = Math.max(0.001, 0.9 * cl((p * 9 - celda * 0.9))); }); },
+    pj: [[pasajeraT, () => ({ cara: 'sorpresa', brazos: [60, 60], codos: [100, 100] })]],
+  },
+  { // 10. La proa se fue hundiendo, el agua llenó el primer compartimento... y se desbordó al siguiente. (x3)
+    amb: ['noche'],
+    tomas: [[0, u => { const x = titanic.position.x; return { pos: [x + 50, 6, 34], mira: [x + 12, 2, 0], fov: 46 }; }],
+            [(d, P) => P.w(5) - 0.1, u => ({ pos: enCorte(LC + 6 - u * 0.5, 15, 24), mira: enCorte(LC - 12, 4, 0), fov: 48 })]],
+    act: (u, d, P) => { navegar(0, 0.6 * cl(u / 2), 0.04 * cl(u / 2)); iceberg.visible = false;
+      const tLleno = P.w(9), tA = P.w(13), tB = P.w(16), tC = P.w(19);
+      const lleno = k => TOPE * K.frena(k);
+      const niv = [lleno(cl((u - P.w(5)) / (tLleno + 0.6 - P.w(5)))), 4 + (TOPE - 4) * K.frena(cl((u - tA) / 0.8)),
+                   4 + (TOPE - 4) * K.frena(cl((u - tB) / 0.8)), 4 + (TOPE - 4) * K.frena(cl((u - tC) / 0.8)), 4, 0, 0];
+      niv[4] = 4 + (TOPE - 4) * K.frena(cl((u - tC - 0.6) / 0.8));
+      estadoCorte({ niveles: niv, puertasK: 1, gira: 0.07 * cl((u - P.w(5)) / 2),
+                    cascada: [[1, (u - tA) / 0.8], [2, (u - tB) / 0.8], [3, (u - tC) / 0.8]] }); },
+    over: (ctx, u, d, P) => [13, 16, 19].forEach((k, i) => K.letrero(ctx, ['1→2', '2→3', '3→4'][i], 0.5, 0.2, (u - P.w(k)) / 0.3, { tam: 170, color: '#6fd0ff', giro: 0 })),
+  },
+  { // 11. Dos horas y cuarenta minutos después, el barco insumergible estaba en el fondo del mar.
+    amb: ['noche'],
+    tomas: [[0, (u, d) => ({ pos: [titanic.position.x - 70, 14, 60], mira: [5, 4, 0], fov: 46 })]],
+    act: (u, d) => { const p = u / d; estadoCorte();
+      const inc = 0.04 + 0.45 * K.suave(p / 0.55), baja = 0.6 + 40 * K.suave((p - 0.45) / 0.5);
+      titanic.position.set(0, -baja, 0); titanic.rotation.z = -inc;
+      titanic.userData.ojoMat.emissive.set(p > 0.5 ? 0x000000 : 0xffd27a);
+      burbujas.forEach((b, i) => { const k = (p - 0.75) / 0.25; b.visible = k > 0 && k < 1;
+        b.position.set(15 + Math.cos(i * 2.4) * (2 + k * 8), 0.1, Math.sin(i * 2.4) * (2 + k * 8)); b.scale.set(1, 0.3, 1); }); },
+    fin: () => burbujas.forEach(b => (b.visible = false)),
+    over: (ctx, u, d) => K.letrero(ctx, '2 H 40 MIN', 0.5, 0.2, u / 0.35, { tam: 160, color: '#ffffff', giro: 0 }),
+  },
+  { // 12. Y lo peor: solo llevaba botes salvavidas para la mitad de la gente.
+    amb: ['noche'],
+    tomas: [[0, u => ({ pos: [XB, 11, 30 - u * 1.2], mira: [XB, 6, -1], fov: 46 })]],
+    act: () => {},
+    pj: multitud.map((p, i) => [p, () => ({ cara: i % 3 ? 'preocupado' : 'sorpresa', brazos: [15, i % 2 ? 60 : 15], codos: [10, 90] })]),
+    over: (ctx, u, d) => { K.letrero(ctx, '2,224 A BORDO', 0.5, 0.16, (u / d - 0.25) / 0.2, { tam: 120, color: '#ffffff', giro: 0 });
+                           K.letrero(ctx, '1,178 LUGARES', 0.5, 0.25, (u / d - 0.5) / 0.2, { tam: 120, color: '#ffd600', giro: 0 }); },
+  },
+  { // 13. Desde entonces, la ley obliga a que todos los barcos lleven botes para todos.
+    amb: ['dia'],
+    tomas: [[0, u => ({ pos: [XM + 2, 4.4, 15 - u * 0.6], mira: [XM - 1, 5, -4], fov: 50 })],
+            [(d) => d * 0.6, (u, d) => { const k = K.suave(u / (d * 0.4)); return { pos: lerp([XM + 2, 4.4, 15], [XM + 30, 18, 40], k), mira: [XM, 6, -14], fov: 48 }; }]],
+    act: () => {},
+    pj: [[capitanM, () => ({ cara: 'feliz', brazos: [15, 150], codos: [10, 25], habla: true })],
+         [marineroM, () => ({ cara: 'feliz', brazos: [150, 150], codos: [10, 10] })]],
+    over: (ctx, u, d) => palomita(ctx, 0.5, 0.22, (u / d - 0.55) / 0.15),
+  },
+];
+
+// ============================================================ cada cuadro
+let T = 0;
+const P_DE = n => ({ w: k => datos.frases[n].palabras[k] });
+window.cuadro = (t) => {
+  T = t;
+  let n = 0;
+  while (n + 1 < datos.frases.length && t >= datos.frases[n + 1].ini) n++;
+  temblor = 0; destello = 0;
+  titanic.userData.ojoMat.emissive.set(0); titanic.userData.ojoMat.color.set(0x6b6b5a);
+  for (let i = 0; i <= n; i++) {
+    const F = FRASES[i], ini = datos.frases[i].ini, dur = datos.frases[i].fin - ini;
+    const u = i < n ? dur : t - ini;
+    if (F.act) F.act(u, dur, P_DE(i));
+    if (i < n && F.fin) F.fin();
+  }
+  const F = FRASES[n], ini = datos.frases[n].ini, dur = datos.frases[n].fin - ini, u = t - ini, P = P_DE(n);
+  let ti = 0;
+  const inicioToma = j => (typeof F.tomas[j][0] === 'function' ? F.tomas[j][0](dur, P) : F.tomas[j][0]);
+  while (ti + 1 < F.tomas.length && u >= inicioToma(ti + 1)) ti++;
+  const ut = u - inicioToma(ti);
+  const tm = F.tomas[ti][1](ut, dur, P);
+  const enDiagrama = tm.mira[0] > 200 && tm.mira[0] < 450;  // el corte siempre se ve con luz de día
+  const [a, b, fk] = enDiagrama ? ['dia'] : F.amb;
+  const kAmb = fk ? fk(u, dur) : 0;
+  K.ambiente(mundo, a, b || a, kAmb);
+  const noche = (b || a) === 'noche';
+  solG.visible = !noche; nocheG.visible = noche; nubes.forEach(c => (c.visible = !noche));
+  MAR.color.set(noche ? 0x1a3f75 : 0x2c6fb5);
+  const pos = tm.pos.toArray ? tm.pos.toArray() : tm.pos;
+  const sacude = temblor * 0.5;
+  camara.position.set(pos[0] + Math.sin(t * 91) * sacude, pos[1] + Math.sin(t * 77) * sacude, pos[2]);
+  camara.lookAt(...tm.mira);
+  camara.fov = tm.fov * (1 + 0.08 * (1 - K.frena(ut / 0.25)));
+  camara.updateProjectionMatrix();
+  luz.target.position.set(tm.mira[0], 0, tm.mira[2]);
+  luz.position.copy(luz.target.position).add(luz.userData.offset);
+  luz.target.updateMatrixWorld();
+  (F.pj || []).forEach(([pj, est]) => pj.actualizar(t, camara, est(u, dur, P)));
+  r.efecto.render(escena, camara);
+  r.ctx.drawImage(r.gl.domElement, 0, 0);
+  if (F.over) F.over(r.ctx, u, dur, P);
+  K.destello(r.ctx, destello);
+  K.subtitulos(r.ctx, datos.subs, t);
+  return r.salida.toDataURL('image/jpeg', 0.9);
+};
+window.listo = K.cargarFuente();
+</script>
+</body>
+</html>

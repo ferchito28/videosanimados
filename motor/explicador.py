@@ -435,6 +435,9 @@ class Explicador(Escena):
         for fr in self.frases:
             grupo = []
             for p in fr.palabras:
+                if grupo and len(" ".join(_limpiar(palabras[g]) for g in grupo + [idx])) > 15:
+                    self._agregar_sub(grupo, palabras, fr)  # no juntar dos palabras largas
+                    grupo = []
                 grupo.append(idx)
                 idx += 1
                 texto = " ".join(_limpiar(palabras[g]) for g in grupo)

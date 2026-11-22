@@ -235,9 +235,11 @@ export function subtitulos(ctx, subs, t, y = 0.6 * ALTO) {
   if (!actual || actual[1] === '') return;
   const p = (t - actual[0]) / 0.14;
   const k = p < 1 ? 0.72 + 0.28 * rebote(p) : 1;
-  const tam = 118 * k;
+  let tam = 118 * k;
   ctx.save();
   ctx.font = `${tam}px Anton`;
+  const ancho = ctx.measureText(actual[1]).width;
+  if (ancho > ANCHO * 0.86) { tam *= ANCHO * 0.86 / ancho; ctx.font = `${tam}px Anton`; }
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.lineJoin = 'round';

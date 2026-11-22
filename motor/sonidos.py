@@ -105,8 +105,16 @@ def ding():
     return (np.sin(2 * np.pi * 1320 * t) + 0.5 * np.sin(2 * np.pi * 1980 * t)) * np.exp(-t * 6) * 0.35
 
 
+def agua():
+    """Chapoteo / agua entrando."""
+    t = _t(0.7)
+    r = _paso_bajo(_ruido(len(t), 12), 12)
+    burbujas = 0.6 + 0.4 * np.sin(2 * np.pi * 14 * t) * np.sin(2 * np.pi * 3 * t)
+    return r * burbujas * np.minimum(1, t * 20) * np.exp(-t * 3) * 1.2
+
+
 SONIDOS = {f.__name__: f for f in (golpe, golpecito, whoosh, boing, paso, resbalon,
-                                    pop, estrellas, tada, whoosh_suave, tac, crac, ding)}
+                                    pop, estrellas, tada, whoosh_suave, tac, crac, ding, agua)}
 
 
 def crear_pista(eventos, duracion, ruta):

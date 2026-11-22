@@ -118,7 +118,11 @@ def desde_audio(palabras, ruta):
         return t0 + (est[i][1] - base) / total_est * (t1 - t0)
 
     # 1) pausas largas (fin de oración, "...", "¡crac!") ↔ silencios largos
-    largos = [g for g in gaps if g[1] - g[0] >= 0.35]
+    # el umbral se adapta a cada voz: tantas pausas largas como finales de oración (+15%)
+    durs = sorted((g[1] - g[0] for g in gaps), reverse=True)
+    k = min(len(durs), max(1, round(len(fuertes) * 1.15)))
+    umbral = max(0.2, min(0.35, durs[k - 1])) if durs else 0.35
+    largos = [g for g in gaps if g[1] - g[0] >= umbral]
     pares = _emparejar([(i, esperado(i, 0, ini, len(palabras) - 1, fin), 1.0) for i in fuertes], largos,
                         pen_pausa=2.5, pen_silencio=4.0)
     # 2) comas dentro de cada tramo ↔ los silencios que quedan en ese tramo

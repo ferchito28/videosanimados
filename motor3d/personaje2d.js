@@ -11,6 +11,10 @@ export const VESTUARIOS = {
   jefe: { saco: '#2f5d46', camisa: '#ffffff', mono: '#b3202c', sombrero: 'copa', bigote: true, pelo: '#3a2a22' },
   ingeniero: { camisa: '#f4f4f4', corbata: '#2f6fd6', sombrero: 'casco_blanco', lentes: true, pelo: '#2b2b2b' },
   chofer: { camisa: '#d9483b', gorra: '#2d4fa8', sombrero: 'gorra', pelo: '#6b4b2a' },
+  capitan: { saco: '#1f2a4a', camisa: '#ffffff', sombrero: 'gorra_capitan', barba: '#ececec', pelo: '#e2e2e2' },
+  pasajero: { saco: '#7a5233', camisa: '#ffffff', corbata: '#3b6e3a', sombrero: 'bombin', bigote: true, pelo: '#3a2a22' },
+  pasajera: { saco: '#b04f86', vestido: true, sombrero: 'pamela', pelo_largo: '#8a4a2a' },
+  marinero: { camisa: '#ffffff', cuello: '#2d4fa8', sombrero: 'marinero', pelo: '#6b4b2a' },
 };
 
 function contorno(ctx, w = 11) { ctx.lineWidth = w; ctx.strokeStyle = LINEA; ctx.lineJoin = 'round'; ctx.lineCap = 'round'; }
@@ -49,6 +53,17 @@ function cuerpo(ctx, v, tipo) {
     ctx.fillStyle = '#d8d8d8'; ctx.fillRect(300, 560, 34, 40);
   } else if (tipo === 'chofer') {
     ctx.fillStyle = '#ffffff'; ctx.fillRect(230, 470, 52, 320);
+  } else if (tipo === 'capitan' || tipo === 'pasajero') {
+    ctx.fillStyle = v.camisa; ctx.beginPath(); ctx.moveTo(220, 490); ctx.lineTo(292, 490); ctx.lineTo(256, 610); ctx.fill();
+    if (v.corbata) { ctx.fillStyle = v.corbata; ctx.fillRect(248, 495, 16, 100); }
+    ctx.fillStyle = tipo === 'capitan' ? '#f0c040' : '#3a2416';
+    [600, 650, 700].forEach(y => [226, 286].forEach(x => { ctx.beginPath(); ctx.arc(x, y, 8, 0, 7); ctx.fill(); }));
+  } else if (tipo === 'marinero') {
+    ctx.fillStyle = v.cuello; ctx.beginPath(); ctx.moveTo(180, 490); ctx.lineTo(332, 490); ctx.lineTo(256, 600); ctx.fill();
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(160, 520, 200, 8);
+  } else if (tipo === 'pasajera') {
+    ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(256, 495, 40, 0, Math.PI); ctx.fill();
+    ctx.fillStyle = '#7a2f5a'; ctx.fillRect(150, 660, 220, 26);
   }
   ctx.restore();
   contorno(ctx, 11); ctx.beginPath();
@@ -147,11 +162,32 @@ function sombrero(ctx, v) {
     ctx.beginPath(); ctx.roundRect(cx - 95, cy - 330, 190, 210, 10); ctx.fill(); contorno(ctx, 11); ctx.stroke();
     ctx.fillStyle = '#c8283a'; ctx.fillRect(cx - 89, cy - 170, 178, 34);
     ctx.fillStyle = '#1d1a22'; ctx.beginPath(); ctx.roundRect(cx - 165, cy - 135, 330, 30, 15); ctx.fill(); ctx.stroke();
+  } else if (v.sombrero === 'gorra_capitan') {
+    ctx.beginPath(); ctx.ellipse(cx, cy - 150, 175, 60, 0, 0, Math.PI * 2); ctx.fillStyle = '#ffffff'; ctx.fill(); contorno(ctx, 11); ctx.stroke();
+    ctx.beginPath(); ctx.roundRect(cx - 130, cy - 150, 260, 55, 10); ctx.fillStyle = '#1f2a4a'; ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.ellipse(cx + 40, cy - 92, 120, 22, 0.05, 0, Math.PI * 2); ctx.fillStyle = '#141414'; ctx.fill(); ctx.stroke();
+    elipse(ctx, cx, cy - 125, 22, 18, '#f0c040', 6);
+  } else if (v.sombrero === 'bombin') {
+    ctx.beginPath(); ctx.ellipse(cx, cy - 120, 125, 115, 0, Math.PI, 0); ctx.closePath(); ctx.fillStyle = '#2a2420'; ctx.fill(); contorno(ctx, 11); ctx.stroke();
+    ctx.beginPath(); ctx.ellipse(cx, cy - 118, 185, 26, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  } else if (v.sombrero === 'pamela') {
+    ctx.beginPath(); ctx.ellipse(cx, cy - 115, 240, 40, -0.08, 0, Math.PI * 2); ctx.fillStyle = '#f2d6a2'; ctx.fill(); contorno(ctx, 11); ctx.stroke();
+    ctx.beginPath(); ctx.ellipse(cx, cy - 145, 120, 70, 0, Math.PI, 0); ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#b04f86'; ctx.fillRect(cx - 118, cy - 160, 236, 24);
+    [[cx + 95, cy - 165], [cx + 125, cy - 150]].forEach(([x, y]) => elipse(ctx, x, y, 26, 26, '#ff6b8a', 6));
+  } else if (v.sombrero === 'marinero') {
+    ctx.beginPath(); ctx.ellipse(cx, cy - 135, 140, 50, 0, 0, Math.PI * 2); ctx.fillStyle = '#ffffff'; ctx.fill(); contorno(ctx, 11); ctx.stroke();
+    ctx.beginPath(); ctx.roundRect(cx - 110, cy - 140, 220, 40, 10); ctx.fillStyle = '#2d4fa8'; ctx.fill(); ctx.stroke();
   } else if (v.sombrero === 'gorra') {
     ctx.beginPath(); ctx.ellipse(cx, cy - 110, 150, 95, 0, Math.PI, 0); ctx.closePath();
     ctx.fillStyle = v.gorra; ctx.fill(); contorno(ctx, 11); ctx.stroke();
     ctx.beginPath(); ctx.ellipse(cx + 120, cy - 112, 95, 22, 0.1, 0, 7); ctx.fill(); ctx.stroke();
   }
+}
+
+function falda(ctx, v) {
+  ctx.beginPath(); ctx.moveTo(180, 690); ctx.lineTo(332, 690); ctx.lineTo(380, 900); ctx.quadraticCurveTo(256, 930, 132, 900); ctx.closePath();
+  ctx.fillStyle = v.saco; ctx.fill(); contorno(ctx, 11); ctx.stroke();
 }
 
 function dibujar(ctx, v, tipo, est, t) {
@@ -168,6 +204,7 @@ function dibujar(ctx, v, tipo, est, t) {
   const ropa = v.saco || v.camisa;
   const [bi, bd] = est.brazos || [15, 15];
   brazo(ctx, -1, bi, est.codos ? est.codos[0] : 10, ropa);
+  if (v.vestido) falda(ctx, v);
   cuerpo(ctx, v, tipo);
   const mano = brazo(ctx, 1, bd, est.codos ? est.codos[1] : 10, ropa);
   if (est.objeto === 'plano') {
@@ -176,10 +213,16 @@ function dibujar(ctx, v, tipo, est, t) {
   }
   // cabeza blanca con sombreado suave
   if (v.pelo) { elipse(ctx, 256 - 160, 320, 40, 60, v.pelo, 8); elipse(ctx, 256 + 160, 320, 40, 60, v.pelo, 8); }
+  if (v.pelo_largo) { ctx.beginPath(); ctx.roundRect(70, 200, 372, 330, 120); ctx.fillStyle = v.pelo_largo; ctx.fill(); contorno(ctx, 10); ctx.stroke(); }
   elipse(ctx, 256, 300, 172, 160, '#ffffff', 12);
   ctx.save(); ctx.beginPath(); ctx.ellipse(256, 300, 166, 154, 0, 0, Math.PI * 2); ctx.clip();
   ctx.fillStyle = 'rgba(120,130,160,0.16)'; ctx.beginPath(); ctx.ellipse(196, 360, 175, 150, 0, 0, 7); ctx.ellipse(256, 300, 200, 200, 0, 0, 7); ctx.fill('evenodd');
   ctx.restore();
+  if (v.barba) {
+    ctx.beginPath(); ctx.moveTo(110, 330); ctx.quadraticCurveTo(120, 480, 256, 500); ctx.quadraticCurveTo(392, 480, 402, 330);
+    ctx.quadraticCurveTo(330, 400, 256, 400); ctx.quadraticCurveTo(182, 400, 110, 330); ctx.closePath();
+    ctx.fillStyle = v.barba; ctx.fill(); contorno(ctx, 9); ctx.stroke();
+  }
   cara(ctx, v, est, t);
   sombrero(ctx, v);
   ctx.restore();
