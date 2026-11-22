@@ -1,21 +1,25 @@
 {
   "titulo": "VENDIÓ LA|TORRE EIFFEL",
+  "voz_narrador": "george",
   "musica": null,
   "personajes": {
     "lustig": {
       "sombrero": "bombin", "sombrero_color": "#2a2a30",
       "bigote": "manubrio", "pelo": "lado", "pelo_color": "#3b2a20",
-      "ropa": "#2f4f6f", "corbata": "#c0392b"
+      "ropa": "#2f4f6f", "corbata": "#c0392b",
+      "voz": "george"
     },
     "poisson": {
       "sombrero": "copa", "sombrero_color": "#1f1f24",
       "bigote": "grueso", "pelo": "rizado", "pelo_color": "#9a9a9a",
-      "gafas": true, "ropa": "#6b4a2f"
+      "gafas": true, "ropa": "#6b4a2f",
+      "voz": "brian"
     },
     "gendarme": {
       "sombrero": "gorra", "sombrero_color": "#24407a",
       "bigote": "grueso", "pelo": "ninguno", "pelo_color": "#2a1d16",
-      "ropa": "#24407a", "corbata": "#111111"
+      "ropa": "#24407a", "corbata": "#111111",
+      "voz": "daniel"
     }
   },
   "escenas": [

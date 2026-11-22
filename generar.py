@@ -15,10 +15,11 @@ def main():
     ap.add_argument("historia")
     ap.add_argument("-o", "--salida")
     ap.add_argument("--fps", type=int, default=30)
+    ap.add_argument("--sin-voz", action="store_true", help="no llamar a ElevenLabs (prueba rápida)")
     ap.add_argument("--captura", type=float, nargs="*", help="segundos a exportar como PNG")
     a = ap.parse_args()
 
-    anim = Animador(a.historia)
+    anim = Animador(a.historia, usar_voces=not a.sin_voz)
     nombre = Path(a.historia).stem
     if a.captura is not None:
         for t in a.captura or [1.0]:

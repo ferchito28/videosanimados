@@ -5,9 +5,10 @@ import subprocess
 import tempfile
 from pathlib import Path
 
+import numpy as np
 from PIL import Image
 
-from . import audio, fondo, personaje, texto
+from . import audio, fondo, personaje, texto, voz
 
 W, H = 1080, 1920
 PISO_Y = 1800          # donde apoyan los pies
@@ -45,7 +46,28 @@ def _tiempos_palabras(palabras, inicio, dur_habla):
     return out
 
 
-def construir_linea_de_tiempo(h, base):
+def _envolvente(x, fps=60):
+    """Volumen de la voz 60 veces por segundo, normalizado a 0..1 (para mover la boca)."""
+    n = audio.SR // fps
+    m = len(x) // n
+    if m == 0:
+        return np.zeros(1)
+    rms = np.sqrt((x[:m * n].reshape(m, n) ** 2).mean(axis=1))
+    return rms / (np.percentile(rms, 95) + 1e-6)
+
+
+def _elegir_voz(h, ln, usar_voces):
+    if not usar_voces:
+        return None
+    pid = ln.get("personaje")
+    if ln.get("voz"):
+        return ln["voz"]
+    if pid and h["personajes"].get(pid, {}).get("voz"):
+        return h["personajes"][pid]["voz"]
+    return h.get("voz_narrador") if not pid else None
+
+
+def construir_linea_de_tiempo(h, base, usar_voces=True):
     escenas, eventos, t = [], [], 0.0
     for ie, e in enumerate(h["escenas"]):
         ini = t
@@ -53,27 +75,35 @@ def construir_linea_de_tiempo(h, base):
         lineas = []
         for ln in e["lineas"]:
             palabras = ln["texto"].split()
-            if ln.get("audio"):
-                voz = audio.leer(base / ln["audio"])
-                habla = len(voz) / audio.SR
-                eventos.append((t, voz, 1.0))
+            t_pal, env, nombre_voz = None, None, _elegir_voz(h, ln, usar_voces)
+            if ln.get("audio") or nombre_voz:
+                if ln.get("audio"):
+                    ruta, alineado = base / ln["audio"], None
+                else:
+                    ruta, alineado = voz.generar(ln["texto"], nombre_voz, h.get("ajustes_voz"))
+                x = audio.leer(ruta)
+                habla = len(x) / audio.SR
+                eventos.append((t, x, 1.0))
+                env = _envolvente(x)
+                if alineado and len(alineado) == len(palabras):
+                    t_pal = [(t + a, t + b) for _, a, b in alineado]
             else:
                 habla = ln.get("duracion") or max(1.0, 0.068 * len(ln["texto"]) + 0.3)
             fin = t + habla + ln.get("pausa", 0.25)
-            lineas.append({**ln, "inicio": t, "fin_habla": t + habla, "fin": fin,
-                           "palabras": palabras, "t_pal": _tiempos_palabras(palabras, t, habla)})
+            lineas.append({**ln, "inicio": t, "fin_habla": t + habla, "fin": fin, "env": env,
+                           "palabras": palabras, "t_pal": t_pal or _tiempos_palabras(palabras, t, habla)})
             t = fin
         escenas.append({**e, "inicio": ini, "fin": t, "lineas": lineas})
     return escenas, eventos, t
 
 
 class Animador:
-    def __init__(self, ruta_historia):
+    def __init__(self, ruta_historia, usar_voces=True):
         self.ruta = Path(ruta_historia)
         self.base = self.ruta.parent
         self.h = json.loads(self.ruta.read_text(encoding="utf-8"))
         self.reparto = self.h["personajes"]
-        self.escenas, self.eventos, self.total = construir_linea_de_tiempo(self.h, self.base)
+        self.escenas, self.eventos, self.total = construir_linea_de_tiempo(self.h, self.base, usar_voces)
         self.fondos = {}
         self.sprites = {}
         self.titulo = texto.titulo(_lineas_titulo(self.h["titulo"])) if self.h.get("titulo") else None
@@ -107,7 +137,11 @@ class Animador:
         for i, pc in enumerate(esc.get("personajes", [])):
             pid = pc["id"]
             habla = bool(linea and linea.get("personaje") == pid and t < linea["fin_habla"])
-            boca = habla and (math.sin(t * 29 + i) + 0.6 * math.sin(t * 13)) > -0.2
+            if habla and linea["env"] is not None:
+                env = linea["env"]
+                boca = env[min(len(env) - 1, int((t - linea["inicio"]) * 60))] > 0.35
+            else:
+                boca = habla and (math.sin(t * 29 + i) + 0.6 * math.sin(t * 13)) > -0.2
             cerrados = ((t + i * 1.37) % 3.2) < 0.12
             expresion = pc.get("expresion", "normal")
             brazo = pc.get("brazo", "abajo")

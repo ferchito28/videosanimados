@@ -21,4 +21,14 @@ python3 generar.py historias/ejemplo.json --captura 2 6.5  # solo fotogramas PNG
   ajusta a su duración), `duracion`, `pausa`.
 - `musica` y `volumen_musica`: música de fondo opcional.
 
+## Voces (ElevenLabs)
+- Pon `"voz"` en cada personaje y `"voz_narrador"` para líneas sin personaje. También se puede
+  cambiar por línea con `"voz"`.
+- Nombres disponibles: george, adam, daniel, brian, charlie, liam, matilda (ver `animador/voz.py`),
+  o cualquier ID de voz de tu cuenta o de la Voice Library.
+- Los subtítulos usan los tiempos exactos de cada palabra y la boca se mueve con el volumen.
+- Las voces se guardan en `cache_voces/`: volver a generar el mismo texto no gasta créditos.
+- La clave la inyecta el entorno en la nube. En otro equipo, define `ELEVENLABS_API_KEY`.
+- `--sin-voz` genera sin llamar a ElevenLabs (para pruebas rápidas).
+
 Para otra fuente del título, copia un `.ttf` a `fuentes/titulo.ttf`.
