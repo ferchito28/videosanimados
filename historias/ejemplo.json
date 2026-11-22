@@ -1,0 +1,61 @@
+{
+  "titulo": "VENDIÓ LA|TORRE EIFFEL",
+  "musica": null,
+  "personajes": {
+    "lustig": {
+      "sombrero": "bombin", "sombrero_color": "#2a2a30",
+      "bigote": "manubrio", "pelo": "lado", "pelo_color": "#3b2a20",
+      "ropa": "#2f4f6f", "corbata": "#c0392b"
+    },
+    "poisson": {
+      "sombrero": "copa", "sombrero_color": "#1f1f24",
+      "bigote": "grueso", "pelo": "rizado", "pelo_color": "#9a9a9a",
+      "gafas": true, "ropa": "#6b4a2f"
+    },
+    "gendarme": {
+      "sombrero": "gorra", "sombrero_color": "#24407a",
+      "bigote": "grueso", "pelo": "ninguno", "pelo_color": "#2a1d16",
+      "ropa": "#24407a", "corbata": "#111111"
+    }
+  },
+  "escenas": [
+    {
+      "fondo": "ciudad",
+      "personajes": [{"id": "lustig", "x": 0.5, "escala": 1.35, "expresion": "sospechoso"}],
+      "lineas": [
+        {"personaje": "lustig", "texto": "París, 1925. Leí que la torre cuesta una fortuna mantenerla.", "brazo": "arriba"},
+        {"personaje": "lustig", "texto": "Así que tuve una idea brillante.", "expresion": "feliz"}
+      ]
+    },
+    {
+      "fondo": "oficina",
+      "personajes": [
+        {"id": "lustig", "x": 0.25, "escala": 0.95, "expresion": "sospechoso"},
+        {"id": "poisson", "x": 0.76, "escala": 0.95, "voltear": true}
+      ],
+      "lineas": [
+        {"personaje": "lustig", "texto": "El gobierno la vende como chatarra. Es secreto.", "brazo": "señala"},
+        {"personaje": "poisson", "texto": "¿¡La Torre Eiffel!? ¡La compro!", "expresion": "sorprendido"},
+        {"personaje": "lustig", "texto": "Excelente. Y un pequeño soborno, monsieur.", "expresion": "feliz"}
+      ]
+    },
+    {
+      "fondo": "noche",
+      "personajes": [{"id": "poisson", "x": 0.5, "escala": 1.35, "expresion": "triste"}],
+      "lineas": [
+        {"personaje": "poisson", "texto": "Me estafaron... y me da vergüenza denunciarlo.", "expresion": "triste"}
+      ]
+    },
+    {
+      "fondo": "campo",
+      "personajes": [
+        {"id": "lustig", "x": 0.25, "escala": 0.95, "expresion": "feliz"},
+        {"id": "gendarme", "x": 0.76, "escala": 0.95, "voltear": true, "expresion": "enojado"}
+      ],
+      "lineas": [
+        {"personaje": "gendarme", "texto": "¿Y qué hizo un mes después?", "expresion": "enojado"},
+        {"personaje": "lustig", "texto": "¡Volví a venderla otra vez!", "expresion": "feliz", "brazo": "arriba"}
+      ]
+    }
+  ]
+}
