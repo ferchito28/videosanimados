@@ -12,10 +12,10 @@ python3 generar.py historias/ejemplo.json --captura 2 6.5  # solo fotogramas PNG
 ## Historia (JSON)
 - `titulo`: texto; separa líneas con `|` (la última sale en rojo).
 - `personajes`: `sombrero` (bombin, copa, gorra, casco, boina, ninguno), `bigote` (grueso, manubrio,
-  ninguno), `pelo` (lado, rizado, ninguno), `gafas`, colores `ropa`, `pantalon`, `corbata`,
+  ninguno), `pelo` (lado, rizado, largo, ninguno), `gafas`, colores `ropa`, `pantalon`, `corbata`,
   `sombrero_color`, `pelo_color`, `piel`.
-- `escenas`: `fondo` (oficina, campo, noche, ciudad, o ruta a una imagen), `personajes` en escena
-  (`id`, `x` 0–1, `escala`, `voltear`, `expresion`, `brazo`) y `lineas`.
+- `escenas`: `fondo` (oficina, campo, noche, ciudad, calor, o ruta a una imagen), `personajes` en escena
+  (`id`, `x` 0–1, `escala`, `voltear`, `expresion`, `brazo`, y para esa escena `piel`, `ropa`, `sudor`) y `lineas`.
 - `lineas`: `personaje`, `texto`, opcionales `expresion` (normal, feliz, enojado, triste,
   sospechoso, sorprendido), `brazo` (abajo, arriba, señala), `audio` (archivo de voz; el tiempo se
   ajusta a su duración), `duracion`, `pausa`.

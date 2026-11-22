@@ -120,10 +120,10 @@ class Animador:
             self.fondos[nombre] = fondo.crear(nombre, self.base).convert("RGBA")
         return self.fondos[nombre]
 
-    def _sprite(self, pid, boca, cerrados, expresion, brazo, voltear):
-        k = (pid, boca, cerrados, expresion, brazo, voltear)
+    def _sprite(self, pid, boca, cerrados, expresion, brazo, voltear, extra=()):
+        k = (pid, boca, cerrados, expresion, brazo, voltear, extra)
         if k not in self.sprites:
-            cfg = dict(self.reparto[pid], voltear=voltear)
+            cfg = dict(self.reparto[pid], voltear=voltear, **dict(extra))
             self.sprites[k] = personaje.dibujar(cfg, boca, cerrados, expresion, brazo)
         return self.sprites[k]
 
@@ -148,7 +148,8 @@ class Animador:
             if linea and linea.get("personaje") == pid:
                 expresion = linea.get("expresion", expresion)
                 brazo = linea.get("brazo", brazo)
-            spr = self._sprite(pid, boca, cerrados, expresion, brazo, pc.get("voltear", False))
+            extra = tuple(sorted((k, v) for k, v in pc.items() if k in ("piel", "sudor", "ropa")))
+            spr = self._sprite(pid, boca, cerrados, expresion, brazo, pc.get("voltear", False), extra)
 
             esc_k = pc.get("escala", 1.25)
             entrada = _ease_back(local / 0.4) if pc.get("entra", True) else 1.0

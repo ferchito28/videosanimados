@@ -70,6 +70,8 @@ def dibujar(cfg, boca=False, ojos_cerrados=False, expresion="normal", brazo="aba
     if estilo_pelo == "lado":
         d.ellipse(s(62, 220, 150, 400), fill=pelo, outline=TINTA, width=lw)
         d.ellipse(s(450, 220, 538, 400), fill=pelo, outline=TINTA, width=lw)
+    elif estilo_pelo == "largo":
+        d.rounded_rectangle(s(70, 200, 530, 640), radius=150 * S, fill=pelo, outline=TINTA, width=lw)
     elif estilo_pelo == "rizado":
         for cx, cy in ((80, 250), (65, 320), (85, 390), (520, 250), (535, 320), (515, 390)):
             d.ellipse(s(cx - 45, cy - 45, cx + 45, cy + 45), fill=pelo, outline=TINTA, width=lw)
@@ -81,7 +83,11 @@ def dibujar(cfg, boca=False, ojos_cerrados=False, expresion="normal", brazo="aba
     d.ellipse(s(*caja), outline=TINTA, width=lw)
     if cfg.get("mejillas", True):
         for cx in (195, 405):
-            d.ellipse(s(cx - 32, 395, cx + 32, 425), fill=(255, 150, 150, 110))
+            rubor = tuple(int(a * 0.55 + b * 0.45) for a, b in zip(piel[:3], (255, 120, 120))) + (255,)
+            d.ellipse(s(cx - 32, 395, cx + 32, 425), fill=rubor)
+
+    if estilo_pelo == "largo":  # flequillo
+        d.chord(s(88, 138, 512, 430), 188, 352, fill=pelo, outline=TINTA, width=lw)
 
     # --- ojos ---
     ojos = ((232, 330), (368, 330))
@@ -165,6 +171,13 @@ def dibujar(cfg, boca=False, ojos_cerrados=False, expresion="normal", brazo="aba
     elif tipo == "boina":
         d.ellipse(s(100, 100, 470, 230), fill=som, outline=TINTA, width=lw)
         d.line(s(290, 100, 300, 76), fill=TINTA, width=int(10 * S))
+
+    # --- gotas de sudor ---
+    if cfg.get("sudor"):
+        for gx, gy, r in ((120, 300, 22), (490, 260, 26), (455, 400, 18), (160, 200, 16)):
+            d.polygon(s(gx - r * 0.9, gy, gx + r * 0.9, gy, gx, gy - r * 2.4), fill=(120, 200, 255, 255))
+            d.ellipse(s(gx - r, gy - r, gx + r, gy + r), fill=(120, 200, 255, 255), outline=TINTA, width=int(5 * S))
+            d.ellipse(s(gx - r * 0.5, gy - r * 0.5, gx - r * 0.1, gy - r * 0.1), fill=(255, 255, 255, 255))
 
     im = im.resize((ANCHO, ALTO), Image.LANCZOS)
     if cfg.get("voltear"):

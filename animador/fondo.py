@@ -89,7 +89,26 @@ def _ciudad(d, rnd):
         d.rectangle([x, 1700, x + 120, 1720], fill=(240, 220, 120))
 
 
+def _calor(d, rnd):
+    d.ellipse([290, 380, 790, 880], fill=(255, 236, 120))
+    d.ellipse([340, 430, 740, 830], fill=(255, 250, 190))
+    for x0, y0, x1, y1, col in ((-500, 1250, 700, 1700, (236, 170, 90)), (300, 1300, 1600, 1750, (222, 150, 74))):
+        d.ellipse([x0, y0, x1, y1], fill=col)
+    d.rectangle([0, PISO, W, H], fill=(240, 190, 110))
+    for _ in range(120):
+        x, y = rnd.randint(0, W), rnd.randint(PISO, H)
+        d.ellipse([x, y, x + 10, y + 6], fill=(214, 160, 86))
+    for cx, base, alto in ((130, PISO + 30, 360), (960, PISO + 10, 280)):
+        verde, borde = (80, 150, 70), (30, 60, 30)
+        d.rounded_rectangle([cx - 38, base - alto, cx + 38, base], radius=38, fill=verde, outline=borde, width=8)
+        d.rounded_rectangle([cx - 110, base - alto + 90, cx - 60, base - alto + 220], radius=25, fill=verde, outline=borde, width=8)
+        d.rectangle([cx - 80, base - alto + 190, cx - 30, base - alto + 220], fill=verde)
+        d.rounded_rectangle([cx + 60, base - alto + 130, cx + 110, base - alto + 240], radius=25, fill=verde, outline=borde, width=8)
+        d.rectangle([cx + 30, base - alto + 210, cx + 80, base - alto + 240], fill=verde)
+
+
 TEMAS = {
+    "calor": ((255, 140, 50), (255, 214, 140), _calor),
     "oficina": ((214, 190, 140), (186, 158, 110), _oficina),
     "campo": ((120, 196, 240), (214, 238, 255), _campo),
     "noche": ((10, 20, 60), (44, 64, 120), _noche),

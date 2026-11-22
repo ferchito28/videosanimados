@@ -1,0 +1,69 @@
+{
+  "titulo": "¿Y SI NO|SUDARAS?",
+  "voz_narrador": "george",
+  "personajes": {
+    "tono": {
+      "sombrero": "gorra", "sombrero_color": "#d9412b",
+      "bigote": "ninguno", "pelo": "lado", "pelo_color": "#3a2a22",
+      "ropa": "#2e86c1", "voz": "liam"
+    },
+    "doctora": {
+      "sombrero": "ninguno", "bigote": "ninguno",
+      "pelo": "largo", "pelo_color": "#6b3e26",
+      "gafas": true, "ropa": "#f2f2f2", "corbata": "#2e86c1",
+      "voz": "matilda"
+    }
+  },
+  "escenas": [
+    {
+      "fondo": "calor",
+      "personajes": [{"id": "tono", "x": 0.5, "escala": 1.35, "expresion": "enojado", "sudor": true}],
+      "lineas": [
+        {"personaje": "tono", "texto": "¡Odio sudar! Es asqueroso y huele fatal.", "brazo": "arriba"},
+        {"personaje": "tono", "texto": "Ojalá no volviera a sudar nunca más."}
+      ]
+    },
+    {
+      "fondo": "ciudad",
+      "personajes": [{"id": "tono", "x": 0.5, "escala": 1.35, "expresion": "feliz"}],
+      "lineas": [
+        {"personaje": "tono", "texto": "¡Deseo cumplido! Cero sudor, cero manchas.", "brazo": "arriba"},
+        {"personaje": null, "texto": "Pero el sudor no es un defecto. Es tu aire acondicionado."}
+      ]
+    },
+    {
+      "fondo": "campo",
+      "personajes": [
+        {"id": "tono", "x": 0.25, "escala": 0.95, "expresion": "sorprendido", "piel": "#ffc9b8"},
+        {"id": "doctora", "x": 0.76, "escala": 0.95, "voltear": true}
+      ],
+      "lineas": [
+        {"personaje": "tono", "texto": "¿Por qué tengo tanto calor? ¡Solo corrí cinco minutos!"},
+        {"personaje": "doctora", "texto": "Al correr, tus músculos producen mucho calor.", "brazo": "señala"},
+        {"personaje": "doctora", "texto": "El sudor se evapora en tu piel y se lleva ese calor."}
+      ]
+    },
+    {
+      "fondo": "calor",
+      "personajes": [
+        {"id": "tono", "x": 0.25, "escala": 0.95, "expresion": "triste", "piel": "#ff8f7a"},
+        {"id": "doctora", "x": 0.76, "escala": 0.95, "voltear": true, "expresion": "sorprendido"}
+      ],
+      "lineas": [
+        {"personaje": "tono", "texto": "Me mareo... me duele la cabeza..."},
+        {"personaje": "doctora", "texto": "Si tu cuerpo pasa de cuarenta grados, es un golpe de calor. ¡Es una emergencia!"}
+      ]
+    },
+    {
+      "fondo": "oficina",
+      "personajes": [
+        {"id": "tono", "x": 0.25, "escala": 0.95, "expresion": "sospechoso", "sudor": true},
+        {"id": "doctora", "x": 0.76, "escala": 0.95, "voltear": true, "expresion": "feliz"}
+      ],
+      "lineas": [
+        {"personaje": "doctora", "texto": "Y el sudor casi no huele. El olor lo hacen las bacterias de tu piel."},
+        {"personaje": "tono", "texto": "Entonces... ¡bienvenido de vuelta, sudor!", "expresion": "feliz", "brazo": "arriba"}
+      ]
+    }
+  ]
+}
