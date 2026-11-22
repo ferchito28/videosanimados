@@ -1,0 +1,96 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Prueba 3D - carretera de concreto</title>
+<script type="importmap">
+{ "imports": {
+    "three": "/motor3d/node_modules/three/build/three.module.js",
+    "three/addons/": "/motor3d/node_modules/three/examples/jsm/"
+} }
+</script>
+<style>body{margin:0;background:#000}</style>
+</head>
+<body>
+<script type="module">
+import * as THREE from 'three';
+import * as K from '/motor3d/kit.js';
+
+window.DURACION = 5.5;
+const r = K.crearRender();
+const { escena, camara } = r;
+
+K.cielo(escena);
+K.luces(escena, [35, 55, 25]);
+K.sol(escena, 120, 160, -700, 40);
+K.nube(escena, -90, 110, -500, 2.2);
+K.nube(escena, 160, 140, -650, 2.8);
+K.nube(escena, 30, 170, -800, 2);
+K.desierto(escena);
+
+// ---- carretera de concreto con juntas
+const ANCHO_C = 9, LARGO = 420, Z0 = 20;
+const concreto = K.toon(0xc9c8c2);
+const via = K.malla(new THREE.BoxGeometry(ANCHO_C, 0.3, LARGO), concreto, 0, 0.15, Z0 - LARGO / 2);
+escena.add(via);
+const orilla = K.toon(0x8f8e88);
+[-1, 1].forEach(l => escena.add(K.malla(new THREE.BoxGeometry(0.5, 0.36, LARGO), orilla, l * (ANCHO_C / 2 + 0.2), 0.18, Z0 - LARGO / 2)));
+const matJunta = K.sinContorno(new THREE.MeshToonMaterial({ color: 0x4a4946, emissive: 0x000000 }));
+const juntas = [];
+for (let z = Z0 - 4.5; z > Z0 - LARGO; z -= 4.5) {
+  const j = K.malla(new THREE.BoxGeometry(ANCHO_C, 0.06, 0.16), matJunta, 0, 0.31, z, false);
+  escena.add(j); juntas.push(j);
+}
+// junta longitudinal al centro
+escena.add(K.malla(new THREE.BoxGeometry(0.1, 0.06, LARGO), matJunta, 0, 0.31, Z0 - LARGO / 2, false));
+
+// conos de tránsito
+const naranja = K.toon(0xff7a1a), blanco = K.toon(0xffffff);
+for (let i = 0; i < 8; i++) {
+  const c = new THREE.Group();
+  c.add(K.malla(new THREE.ConeGeometry(0.45, 1.3, 16), naranja, 0, 0.75, 0));
+  c.add(K.malla(new THREE.CylinderGeometry(0.29, 0.34, 0.22, 16), blanco, 0, 0.78, 0));
+  c.add(K.malla(new THREE.BoxGeometry(1.0, 0.12, 1.0), naranja, 0, 0.06, 0));
+  c.position.set(ANCHO_C / 2 + 1.4, 0, -4 - i * 9);
+  escena.add(c);
+}
+
+// ---- obrero cabezón a la orilla
+const obrero = K.cabezon({ k: 1.25 });
+obrero.position.set(ANCHO_C / 2 + 2.2, 0, -8);
+obrero.rotation.y = -0.6;
+escena.add(obrero);
+
+const SUBS = [
+  [0.15, '¿POR QUÉ'], [0.75, 'LAS CARRETERAS'], [1.45, 'DE CONCRETO'],
+  [2.15, 'TIENEN ESTAS'], [2.75, 'RAYAS?', true], [4.1, ''],
+];
+
+window.cuadro = (t) => {
+  // cámara: toma aérea → baja al ras del piso → se acerca al obrero
+  const pos = K.recorrido([[0, [-26, 20, 44]], [1.8, [-10, 12, 18]], [3.0, [-1.5, 1.6, 10]],
+                           [4.1, [1.2, 1.4, 4]], [5.5, [1.6, 4.0, 1.0]]], t);
+  const mira = K.recorrido([[0, [0, 2, -70]], [1.8, [0, 0, -35]], [3.0, [0, 0.3, -25]],
+                            [4.1, [0.5, 0.6, -15]], [5.5, [obrero.position.x - 0.4, 3.3, obrero.position.z]]], t);
+  camara.position.copy(pos);
+  camara.lookAt(mira);
+  camara.fov = 45 - 8 * K.suave((t - 3.8) / 1.5);
+  camara.updateProjectionMatrix();
+
+  // las juntas brillan en amarillo cuando se dice "rayas"
+  const brillo = K.suave((t - 2.75) / 0.3) * (0.6 + 0.4 * Math.sin(t * 12));
+  matJunta.color.set(0x4a4946).lerp(new THREE.Color(0xffd600), brillo);
+  matJunta.emissive.set(0x000000).lerp(new THREE.Color(0xc0a000), brillo);
+
+  // el obrero saluda al final
+  K.respirar(obrero, t);
+  const saludo = K.suave((t - 4.0) / 0.4);
+  obrero.userData.brazos[1].rotation.z = 0.25 + saludo * (2.6 + Math.sin(t * 14) * 0.35);
+  obrero.userData.cabeza.rotation.y = -0.3 * saludo;
+  return K.componer(r, SUBS, t);
+};
+
+window.listo = K.cargarFuente();
+</script>
+</body>
+</html>

@@ -1,0 +1,555 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Ciclos de sueño 3D</title>
+<script type="importmap">
+{ "imports": {
+    "three": "/motor3d/node_modules/three/build/three.module.js",
+    "three/addons/": "/motor3d/node_modules/three/examples/jsm/"
+} }
+</script>
+<style>body{margin:0;background:#000}</style>
+</head>
+<body>
+<script type="module">
+// ¿Por qué te despiertas a las 3 a.m.? — ciclos de sueño y el "primer y segundo sueño".
+import * as THREE from 'three';
+import * as K from '/motor3d/kit.js';
+import { Personaje2D, PersonajeCama } from '/motor3d/personaje2d.js';
+import * as R from '/motor3d/realista.js';
+
+const datos = await (await fetch(new URLSearchParams(location.search).get('datos'))).json();
+window.DURACION = datos.duracion;
+await K.cargarFuente();
+
+const r = R.crearRenderRealista();
+const { escena, camara } = r;
+const cielo = K.cielo(escena, '#3f96ea', '#ffe0b0');
+const luz = K.luces(escena, [35, 55, 25]);
+const mundo = { cielo, luz, hemi: luz.userData.hemi };
+const solG = K.sol(escena, 200, 190, -800, 40);
+const nubes = [K.nube(escena, -60, 110, -500, 2.2), K.nube(escena, 120, 140, -650, 2.8)];
+const nocheG = new THREE.Group(); escena.add(nocheG);
+const luna = new THREE.Mesh(new THREE.SphereGeometry(30, 24, 16), K.sinContorno(new THREE.MeshBasicMaterial({ color: 0xfff6d0 })));
+nocheG.add(luna);
+const estrellaMat = K.sinContorno(new THREE.MeshBasicMaterial({ color: 0xffffff }));
+for (let i = 0; i < 220; i++) {
+  const s = new THREE.Mesh(new THREE.SphereGeometry(1.2 + (i % 3) * 0.6, 6, 4), estrellaMat);
+  const a = (i * 137.5) * Math.PI / 180, e = 0.1 + ((i * 53) % 100) / 100 * 0.9;
+  s.position.set(Math.cos(a) * 1000 * Math.cos(e), 1000 * Math.sin(e), -Math.abs(Math.sin(a)) * 1000 * Math.cos(e) - 100);
+  nocheG.add(s);
+}
+const PASTO = K.sinContorno(K.toon(0x5f9a4a));
+const piso = K.malla(new THREE.PlaneGeometry(5000, 5000), PASTO, 0, 0, 0, false); piso.rotation.x = -Math.PI / 2; escena.add(piso);
+
+const caja = (w, h, d, mat, x, y, z, padre = escena) => { const m = K.malla(new THREE.BoxGeometry(w, h, d), mat, x, y, z); padre.add(m); return m; };
+const cl = x => Math.min(1, Math.max(0, x));
+const lerp = (a, b, k) => a.map((v, i) => v + (b[i] - v) * k);
+const TIPOS = ['pasajero', 'pasajera', 'jefe', 'obrero', 'chofer', 'ingeniero', 'pasajera', 'marinero'];
+function arbol(padre, x, z, k = 1) {
+  padre.add(K.malla(new THREE.CylinderGeometry(0.3 * k, 0.4 * k, 3 * k, 8), K.toon(0x7a5232), x, 1.5 * k, z));
+  padre.add(K.malla(new THREE.SphereGeometry(1.8 * k, 14, 10), K.toon(0x3f8f3f), x, 3.8 * k, z));
+  padre.add(K.malla(new THREE.SphereGeometry(1.3 * k, 12, 8), K.toon(0x4fa54a), x + 0.8 * k, 4.6 * k, z + 0.3));
+}
+
+// ======================================================== CIUDAD (x = 0)
+const mVent = [0, 1, 2, 3, 4, 5].map(() => K.sinContorno(new THREE.MeshToonMaterial({ color: 0x2b3550, emissive: 0x000000 })));
+const ventEncendida = (m, k) => { m.color.set(0x2b3550).lerp(new THREE.Color(0xffe39a), k); m.emissive.set(0).lerp(new THREE.Color(0xc89a30), k); };
+const COLORES_ED = [0xd98b5f, 0x9ec7a8, 0xe9b96e, 0xc9a2d6, 0x8fb7e0, 0xe27a6a, 0xf0d08a, 0xa7b0bd];
+function edificio(x, z, ancho, alto, fondo, color, lado, i) {
+  const g = new THREE.Group(); g.position.set(x, 0, z); escena.add(g);
+  R.vestir(caja(fondo, alto, ancho, K.toon(color), 0, alto / 2, 0, g), R.texturas.ladrillo('#' + new THREE.Color(color).getHexString(), [ancho / 4, alto / 4]));
+  caja(fondo + 0.4, 0.5, ancho + 0.4, K.toon(0x5a5a62), 0, alto + 0.25, 0, g);
+  const fx = -lado * (fondo / 2 + 0.03);
+  for (let y = 4; y < alto - 1.5; y += 3) for (let zz = -ancho / 2 + 1.4; zz < ancho / 2 - 0.8; zz += 2.2) {
+    caja(0.12, 1.6, 1.2, mVent[(i * 7 + Math.round(y * 3 + zz * 5)) % 6], fx, y, zz, g);
+  }
+  if (i % 3 === 0) { caja(1.2, 2.5, 1.2, K.toon(0xa0643a), 0, alto + 1.5, ancho / 4, g); }        // tinaco
+  if (i % 4 === 1) { g.add(K.malla(new THREE.CylinderGeometry(0.06, 0.06, 5, 6), K.toon(0x333333), 0, alto + 2.5, -ancho / 4)); } // antena
+  // planta baja: puerta y toldo
+  caja(0.2, 2.6, 1.6, K.toon(0x5a3a28), fx, 1.3, 0, g);
+  const toldo = caja(1.6, 0.25, ancho * 0.7, K.toon([0xe23c3c, 0x2d6fd6, 0x3cbf5a, 0xffa020][i % 4]), fx - lado * 0.8, 3.3, 0, g);
+  toldo.rotation.z = lado * 0.25;
+  return g;
+}
+const edificiosCiudad = [];
+let ie = 0;
+for (let z = 20; z > -170; z -= 13) for (const lado of [-1, 1]) {
+  const alto = 10 + ((ie * 37) % 7) * 4.5, fondo = 12;
+  edificiosCiudad.push(edificio(lado * (9 + fondo / 2), z, 12, alto, fondo, COLORES_ED[ie % 8], lado, ie)); ie++;
+}
+R.vestir(caja(14, 0.2, 400, K.toon(0x3a3a40), 0, 0.1, -80), R.texturas.adoquin('#4a5058', [3, 90]));                                   // calle
+[-1, 1].forEach(l => caja(3, 0.35, 400, K.toon(0xb8b4aa), l * 8.5, 0.17, -80));          // banquetas
+for (let z = 18; z > -170; z -= 6) caja(0.3, 0.05, 2.5, K.sinContorno(K.toon(0xffffff)), 0, 0.22, z);
+const focoMat = new THREE.MeshToonMaterial({ color: 0x777766, emissive: 0x000000 });
+const postes = [];
+for (let z = 15; z > -170; z -= 12) for (const l of [-1, 1]) {
+  const g = new THREE.Group(); g.position.set(l * 7.5, 0, z + (l > 0 ? 6 : 0)); escena.add(g);
+  g.add(K.malla(new THREE.CylinderGeometry(0.12, 0.16, 6, 8), K.toon(0x2a2a2e), 0, 3, 0));
+  g.add(K.malla(new THREE.BoxGeometry(1.4, 0.12, 0.12), K.toon(0x2a2a2e), -l * 0.6, 6, 0));
+  g.add(K.malla(new THREE.SphereGeometry(0.35, 12, 8), focoMat, -l * 1.2, 5.8, 0));
+  postes.push(g);
+}
+[[-4.5, 2], [4.5, -10], [-4.5, -26], [4.5, -40], [-4.5, -58]].forEach(([x, z], i) => {
+  const a = K.auto3d([0xd9483b, 0x2d7fd6, 0xffc61a, 0x3cbf5a, 0xffffff][i]); a.position.set(x, 0.2, z); escena.add(a);
+});
+for (let z = 10; z > -150; z -= 17) [-1, 1].forEach(l => arbol(escena, l * 8.6, z + l * 3, 0.8));
+// letreros de neón (aparecen con la luz artificial)
+const neones = [];
+const clinicaZ = -36;
+function neon(texto, lado, z, y, color, fondo) {
+  const c = K.cartel(escena, texto, lado * 9.1, y, z, 6, 1.4, fondo, color); c.rotation.y = -lado * Math.PI / 2; neones.push(c); return c;
+}
+neon('HOTEL', -1, 8, 6.5, '#ffffff', '#d23b6a'); neon('CINE', 1, -2, 7, '#fff36b', '#2d4fa8'); neon('24 HRS', -1, -18, 6, '#ffffff', '#e2742a');
+neon('PIZZA', 1, -28, 6, '#ffffff', '#3cbf5a'); neon('TV', -1, -44, 7, '#ffffff', '#8a3cbf');
+const clinica = K.cartel(escena, 'CLÍNICA', 9.1, 5.5, clinicaZ, 7, 1.6, '#2f9a5a', '#ffffff'); clinica.rotation.y = -Math.PI / 2;
+caja(0.3, 1.8, 1.8, K.sinContorno(K.toon(0xffffff)), 9.05, 8.2, clinicaZ); caja(0.32, 0.5, 1.4, K.sinContorno(K.toon(0x2f9a5a)), 9.03, 8.2, clinicaZ); caja(0.32, 1.4, 0.5, K.sinContorno(K.toon(0x2f9a5a)), 9.03, 8.2, clinicaZ);
+// gente de la ciudad (de noche con celular, de día caminando)
+const genteCiudad = [];
+for (let i = 0; i < 14; i++) {
+  const l = i % 2 ? 1 : -1, z = 12 - i * 6.5;
+  genteCiudad.push(new Personaje2D(TIPOS[i % TIPOS.length], 4.0, 0.4).agregar(escena, l * (7.6 + (i % 3) * 0.5), z, 0.35));
+}
+const dormilonCalle = new Personaje2D('dormilon', 4.4).agregar(escena, 4.5, clinicaZ + 8, 0.35);
+const medico = new Personaje2D('medico', 4.6).agregar(escena, 7.4, clinicaZ, 0.35);
+const avesCiudad = K.gaviotas(escena, 0, 24, -30, 6, 18);
+
+// ======================================================== RECÁMARA (x = -300)
+const XR = -300;
+const cuarto = new THREE.Group(); cuarto.position.set(XR, 0, 0); escena.add(cuarto);
+R.vestir(caja(16, 0.3, 14, K.toon(0xc79a62), 0, 0.15, 0, cuarto), R.texturas.madera('#8a5a35', [4, 3]));
+for (let x = -7.5; x <= 7.5; x += 1.5) caja(0.04, 0.32, 14, K.sinContorno(K.toon(0xa67c4a)), x, 0.16, 0, cuarto);
+R.vestir(caja(16, 12, 0.3, K.toon(0x6a5acd), 0, 6, -7, cuarto), R.texturas.tapiz('#e6d6bc', '#c0706a', [4, 3]));
+for (let x = -7; x <= 7; x += 1.4) caja(0.35, 12, 0.05, K.sinContorno(K.toon(0x7b6bde)), x, 6, -6.83, cuarto);
+R.vestir(caja(0.3, 12, 14, K.toon(0x5d4fc0), -8, 6, 0, cuarto), R.texturas.tapiz('#ddcbb0', '#b0605a', [4, 3]));
+// ventana con la ciudad de noche pintada
+const cv = document.createElement('canvas'); cv.width = 512; cv.height = 384;
+{ const c = cv.getContext('2d'); const g = c.createLinearGradient(0, 0, 0, 384); g.addColorStop(0, '#0b1040'); g.addColorStop(1, '#4a2f7a');
+  c.fillStyle = g; c.fillRect(0, 0, 512, 384); c.fillStyle = '#fff6d0'; c.beginPath(); c.arc(400, 80, 36, 0, 7); c.fill();
+  for (let i = 0; i < 40; i++) { c.fillStyle = '#fff'; c.fillRect((i * 97) % 512, (i * 53) % 180, 3, 3); }
+  for (let i = 0; i < 9; i++) { const x = i * 58, h = 120 + (i * 47) % 140; c.fillStyle = '#1e2240'; c.fillRect(x, 384 - h, 54, h);
+    for (let y = 384 - h + 12; y < 380; y += 22) for (let xx = x + 8; xx < x + 48; xx += 14) { c.fillStyle = (xx * y) % 3 ? '#ffd76a' : '#2b3550'; c.fillRect(xx, y, 8, 12); } } }
+const texV = new THREE.CanvasTexture(cv); texV.colorSpace = THREE.SRGBColorSpace;
+const vidrio = new THREE.Mesh(new THREE.PlaneGeometry(6, 4.5), K.sinContorno(new THREE.MeshBasicMaterial({ map: texV })));
+vidrio.position.set(2.5, 7.2, -6.8); cuarto.add(vidrio);
+caja(6.4, 0.3, 0.4, K.toon(0xffffff), 2.5, 9.55, -6.7, cuarto); caja(6.4, 0.3, 0.6, K.toon(0xffffff), 2.5, 4.85, -6.6, cuarto);
+caja(0.2, 4.6, 0.3, K.toon(0xffffff), 2.5, 7.2, -6.7, cuarto);
+[-1, 1].forEach(l => caja(1.4, 6, 0.3, K.toon(0xe23c6a), 2.5 + l * 3.9, 7, -6.5, cuarto));
+// cama
+caja(7.4, 1.0, 4.6, K.toon(0x8a5a35), -1, 0.8, -3.6, cuarto);
+caja(0.5, 4, 4.6, K.toon(0x8a5a35), -4.9, 2.3, -3.6, cuarto);
+caja(7, 0.6, 4.4, K.toon(0xf4f4f4), -1, 1.6, -3.6, cuarto);
+caja(1.8, 0.6, 3, K.toon(0xffffff), -3.6, 2.2, -3.6, cuarto).visible = false;
+const cobija = caja(4.8, 0.7, 4.6, K.toon(0x2d6fd6), 0.2, 2.05, -3.6, cuarto); cobija.visible = false;
+// (la cobija la dibuja el personaje en la cama)
+// buró con despertador y lámpara
+caja(2.2, 2.4, 2.2, K.toon(0xa0643a), 4.2, 1.2, -5.2, cuarto);
+const lampara = new THREE.Group(); lampara.position.set(4.8, 2.4, -5.6); cuarto.add(lampara);
+lampara.add(K.malla(new THREE.CylinderGeometry(0.1, 0.25, 1.6, 10), K.toon(0x333333), 0, 0.8, 0));
+lampara.add(K.malla(new THREE.CylinderGeometry(0.5, 0.9, 1, 16, 1, true), K.toon(0xffe39a, { emissive: 0xc89a30, emissiveIntensity: 0.6, side: THREE.DoubleSide }), 0, 1.9, 0));
+const reloj = new THREE.Group(); reloj.position.set(3.6, 2.4, -4.6); cuarto.add(reloj);
+reloj.add(K.malla(new THREE.CylinderGeometry(0.9, 0.9, 0.5, 24), K.toon(0xe23c3c), 0, 1.0, 0)).children;
+reloj.children[0].rotation.x = Math.PI / 2;
+[-0.6, 0.6].forEach(x => reloj.add(K.malla(new THREE.SphereGeometry(0.35, 12, 8), K.toon(0xffd600), x, 1.9, 0)));
+[-0.5, 0.5].forEach(x => reloj.add(K.malla(new THREE.CylinderGeometry(0.06, 0.06, 0.5, 6), K.toon(0x333333), x, 0.4, 0)));
+const cr = document.createElement('canvas'); cr.width = 256; cr.height = 256;
+const texR = new THREE.CanvasTexture(cr); texR.colorSpace = THREE.SRGBColorSpace;
+const caraReloj = new THREE.Mesh(new THREE.CircleGeometry(0.75, 32), K.sinContorno(new THREE.MeshBasicMaterial({ map: texR })));
+caraReloj.position.set(0, 1.0, 0.27); reloj.add(caraReloj);
+let horaReloj = '';
+function ponerHora(h, m) {
+  const clave = h + ':' + m; if (clave === horaReloj) return; horaReloj = clave;
+  const c = cr.getContext('2d'); c.fillStyle = '#ffffff'; c.beginPath(); c.arc(128, 128, 126, 0, 7); c.fill();
+  c.strokeStyle = '#231a17'; c.lineCap = 'round';
+  for (let i = 0; i < 12; i++) { const a = i / 12 * Math.PI * 2; c.lineWidth = 8; c.beginPath(); c.moveTo(128 + Math.sin(a) * 100, 128 - Math.cos(a) * 100); c.lineTo(128 + Math.sin(a) * 115, 128 - Math.cos(a) * 115); c.stroke(); }
+  const ah = ((h % 12) + m / 60) / 12 * Math.PI * 2, am = m / 60 * Math.PI * 2;
+  c.lineWidth = 14; c.beginPath(); c.moveTo(128, 128); c.lineTo(128 + Math.sin(ah) * 60, 128 - Math.cos(ah) * 60); c.stroke();
+  c.lineWidth = 9; c.beginPath(); c.moveTo(128, 128); c.lineTo(128 + Math.sin(am) * 92, 128 - Math.cos(am) * 92); c.stroke();
+  texR.needsUpdate = true;
+}
+ponerHora(3, 0);
+// librero, tapete, cuadro, pantuflas, osito
+caja(1.6, 8, 4, K.toon(0x8a5a35), -7.1, 4, 3, cuarto);
+for (let y = 1.2; y < 8; y += 1.8) { caja(1.5, 0.15, 3.9, K.toon(0x6e4628), -7.0, y, 3, cuarto);
+  for (let i = 0; i < 6; i++) caja(0.9, 1.2 + (i % 3) * 0.15, 0.4, K.toon([0xe23c3c, 0x2d6fd6, 0xffd600, 0x3cbf5a, 0xff7a1a, 0xc9a2d6][(i + y * 3 | 0) % 6]), -6.9, y + 0.7, 1.5 + i * 0.55, cuarto); }
+const tapete = K.malla(new THREE.CylinderGeometry(3.5, 3.5, 0.08, 32), K.toon(0xff8fb0), 0.5, 0.34, 2, false); tapete.scale.z = 0.6; cuarto.add(tapete);
+const cuadro = K.cartel(cuarto, 'ZZZ', -2, 8.5, -6.8, 3, 1.6, '#ffd600', '#2d4fa8');
+[-0.5, 0.5].forEach(x => { const p = K.malla(new THREE.CapsuleGeometry(0.3, 0.6, 4, 8), K.toon(0x8fb8ff), 3 + x, 0.55, 0.5); p.rotation.x = Math.PI / 2; cuarto.add(p); });
+const osito = new THREE.Group(); osito.position.set(-4.2, 2.3, -2.4); cuarto.add(osito);
+osito.add(K.malla(new THREE.SphereGeometry(0.55, 14, 10), K.toon(0xa0643a), 0, 0.5, 0), K.malla(new THREE.SphereGeometry(0.42, 14, 10), K.toon(0xa0643a), 0, 1.2, 0));
+[-0.3, 0.3].forEach(x => osito.add(K.malla(new THREE.SphereGeometry(0.15, 8, 6), K.toon(0xa0643a), x, 1.55, 0)));
+const dormilon = new Personaje2D('dormilon', 4.4);        // de pie (solo cuando se deja caer)
+dormilon.malla.position.set(1.6, 0.3, 0.6); cuarto.add(dormilon.malla); dormilon.malla.visible = false;
+const enCama = new PersonajeCama('dormilon', 6.4);
+enCama.malla.position.set(-1.0, 1.25, -1.15); cuarto.add(enCama.malla);
+let inclinaCama = 0;
+function acostado(k) { inclinaCama = 1 - k; enCama.malla.visible = true; dormilon.malla.visible = false; }   // 0 = sentado, 1 = acostado
+
+// ======================================================== MONTAÑA RUSA DEL SUEÑO (x = 300)
+const XM = 300;
+const perfil = [[-12, 22]];
+const ciclosY = [[17, 6, 8, 19], [17, 9, 10, 20], [17.5, 11, 12, 21], [18, 13, 14, 21.5], [18, 14, 15, 22]];
+ciclosY.forEach(([lig, prof, sub, rem], c) => {
+  const x0 = c * 40;
+  perfil.push([x0, 23], [x0 + 6, lig], [x0 + 14, prof], [x0 + 21, sub], [x0 + 32, rem], [x0 + 38, 23]);
+});
+perfil.push([212, 23]);
+const ruta = new THREE.CatmullRomCurve3(perfil.map(([x, y]) => new THREE.Vector3(XM + x, y, 0)));
+const tabla = [];
+for (let i = 0; i <= 2000; i++) { const p = ruta.getPointAt(i / 2000); tabla.push(p.x); }
+const uDeX = x => { let i = 0; while (i < 2000 && tabla[i] < XM + x) i++; return i / 2000; };
+const rielMat = K.toon(0xe23c6a), durmienteMat = K.toon(0x8a5a35), postes2 = K.toon(0xffffff);
+[-1.1, 1.1].forEach(z => {
+  const pts = ruta.getSpacedPoints(600).map(p => new THREE.Vector3(p.x, p.y, z));
+  escena.add(K.malla(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 600, 0.22, 8, false), rielMat, 0, 0, 0));
+});
+for (let i = 0; i <= 160; i++) {
+  const u = i / 160, p = ruta.getPointAt(u), tg = ruta.getTangentAt(u);
+  const d = K.malla(new THREE.BoxGeometry(0.35, 0.15, 2.6), durmienteMat, p.x, p.y - 0.15, 0, false);
+  d.rotation.z = Math.atan2(tg.y, tg.x); escena.add(d);
+  if (i % 4 === 0) escena.add(K.malla(new THREE.CylinderGeometry(0.15, 0.15, p.y, 6), postes2, p.x, p.y / 2, 0));
+}
+// zonas de colores bajo la vía (ligero / profundo / REM)
+const zona = (x, y, h, color) => caja(12, h, 0.2, K.sinContorno(new THREE.MeshToonMaterial({ color, transparent: true, opacity: 0.35 })), XM + x, y, -6);
+for (let c = 0; c < 5; c++) { zona(c * 40 + 8, 14, 6, 0x6fb6ff); zona(c * 40 + 16, 6, 10, 0x2d3f8f); zona(c * 40 + 31, 19, 8, 0xc06ae0); }
+const carteles = [];
+const cart = (txt, x, y, fondo) => { const c = K.cartel(escena, txt, XM + x, y, -3.2, 7, 1.6, fondo, '#ffffff'); carteles.push(c); return c; };
+cart('DESPIERTO', -10, 27, '#e2742a'); cart('LIGERO', 6, 22, '#4f9ae0'); cart('PROFUNDO', 14, 11.5, '#2d3f8f'); cart('REM', 32, 24.5, '#b04fd6');
+// cosas de sueños locos que flotan cerca del REM
+const suenos = new THREE.Group(); escena.add(suenos);
+const raros = [];
+for (let c = 0; c < 5; c++) for (let j = 0; j < 4; j++) {
+  const tipo = (c + j) % 4; let m;
+  if (tipo === 0) { m = new THREE.Group(); m.add(K.malla(new THREE.SphereGeometry(0.8, 12, 10), K.toon(0xffd600), 0, 0, 0), K.malla(new THREE.SphereGeometry(0.5, 12, 10), K.toon(0xffd600), 0.6, 0.7, 0), K.malla(new THREE.ConeGeometry(0.2, 0.5, 8), K.toon(0xff7a1a), 1.1, 0.7, 0)); m.children[2].rotation.z = -Math.PI / 2; }
+  else if (tipo === 1) { m = K.malla(new THREE.ConeGeometry(1, 1.8, 3), K.toon(0xffb84a), 0, 0, 0); m.add(K.malla(new THREE.SphereGeometry(0.2, 8, 6), K.toon(0xd23b3b), 0.2, 0, 0.3)); }
+  else if (tipo === 2) { m = K.malla(new THREE.OctahedronGeometry(0.9, 0), K.toon(0xffffff), 0, 0, 0); }
+  else { m = new THREE.Group(); m.add(K.malla(new THREE.CapsuleGeometry(0.5, 1.2, 4, 10), K.toon(0x4fc0e0), 0, 0, 0)); m.add(K.malla(new THREE.ConeGeometry(0.6, 0.8, 3), K.toon(0x4fc0e0), 0, -1.1, 0)); m.rotation.z = Math.PI / 2; }
+  m.position.set(XM + c * 40 + 27 + j * 3.5, 24 + (j % 2) * 4, -2 - j); suenos.add(m); raros.push(m);
+}
+// la cama-carrito
+const carrito = new THREE.Group(); escena.add(carrito);
+caja(4.4, 0.8, 2.6, K.toon(0x8a5a35), 0, 0.6, 0, carrito);
+caja(4.2, 0.4, 2.4, K.toon(0xffffff), 0, 1.2, 0, carrito);
+caja(0.3, 2.2, 2.6, K.toon(0x8a5a35), -2.2, 1.5, 0, carrito);
+// (la cobija del carrito la dibuja el personaje)
+[-1.5, 1.5].forEach(x => [-1.1, 1.1].forEach(z => { const r2 = K.malla(new THREE.CylinderGeometry(0.35, 0.35, 0.2, 12), K.toon(0x222226), x, 0.2, z); r2.rotation.x = Math.PI / 2; carrito.add(r2); }));
+const dormilon2 = new Personaje2D('dormilon', 3.2);
+dormilon2.malla.visible = false;
+const enCarrito = new PersonajeCama('dormilon', 4.8);
+enCarrito.malla.position.set(0.1, 0.75, 1.32); carrito.add(enCarrito.malla);
+function ponerCarrito(u) {
+  u = cl(u); const p = ruta.getPointAt(u), tg = ruta.getTangentAt(u);
+  carrito.position.set(p.x, p.y + 0.1, 0); carrito.rotation.z = Math.atan2(tg.y, tg.x);
+}
+// vía recta (la "línea recta")
+const recta = new THREE.Group(); recta.position.set(XM - 40, 0, 30); escena.add(recta);
+[-1.1, 1.1].forEach(z => caja(40, 0.3, 0.3, K.toon(0x9a9aa4), 0, 1, z, recta));
+for (let x = -19; x <= 19; x += 1.5) caja(0.35, 0.15, 2.6, durmienteMat, x, 0.8, 0, recta);
+const camaRecta = carrito.clone(); camaRecta.position.set(XM - 50, 0.8, 30); escena.add(camaRecta);
+const arbolesM = new THREE.Group(); escena.add(arbolesM);
+for (let i = 0; i < 24; i++) arbol(arbolesM, XM - 20 + (i * 11) % 240, -14 - (i % 3) * 6, 1.2 + (i % 3) * 0.3);
+
+// ======================================================== PUEBLO DE HACE SIGLOS (x = 700)
+const XP = 700;
+const pueblo = new THREE.Group(); pueblo.position.set(XP, 0, 0); escena.add(pueblo);
+R.vestir(caja(120, 0.2, 40, K.toon(0x8a7d6b), 0, 0.1, 0, pueblo), R.texturas.adoquin('#7a7f86', [24, 8]));
+for (let i = 0; i < 80; i++) { const pd = K.malla(new THREE.CylinderGeometry(0.5 + (i % 3) * 0.2, 0.6, 0.15, 6), K.toon(0x9e927e), -55 + (i * 13.7) % 110, 0.22, -6 + (i * 7.3) % 12, false); pueblo.add(pd); }
+const velaMat = K.sinContorno(new THREE.MeshToonMaterial({ color: 0x2a2620, emissive: 0x000000 }));
+const humosP = [];
+function casita(x, lado, w, h, color, techo) {
+  const g = new THREE.Group(); g.position.set(x, 0, lado * 13); g.rotation.y = lado > 0 ? Math.PI : 0; pueblo.add(g);
+  R.vestir(caja(w, h, 7, K.toon(color), 0, h / 2, 0, g), R.texturas.revoque('#' + new THREE.Color(color).getHexString(), [1, 1]));
+  const madera = K.toon(0x5a3a22);
+  [-w / 2 + 0.2, w / 2 - 0.2, 0].forEach(xx => caja(0.35, h, 0.2, madera, xx, h / 2, 3.55, g));
+  caja(w, 0.35, 0.2, madera, 0, h * 0.55, 3.55, g);
+  const diag = caja(0.3, Math.hypot(w / 2, h * 0.45), 0.2, madera, -w / 4, h * 0.775, 3.56, g); diag.rotation.z = Math.atan2(w / 2, h * 0.45);
+  const forma = new THREE.Shape(); forma.moveTo(-w / 2 - 0.8, 0); forma.lineTo(w / 2 + 0.8, 0); forma.lineTo(0, h * 0.7); forma.closePath();
+  const geo = new THREE.ExtrudeGeometry(forma, { depth: 8, bevelEnabled: false }); geo.translate(0, 0, -4);
+  const t = new THREE.Mesh(geo, K.toon(techo)); t.position.y = h; t.castShadow = true; g.add(t); R.vestir(t, R.texturas.tejas('#' + new THREE.Color(techo).getHexString(), [0.25, 0.25]));
+  caja(1, 3, 1, K.toon(0x7a6a5a), w / 4, h + h * 0.5, -1, g);
+  humosP.push(K.humo(g, w / 4, h + h * 0.5 + 1.8, -1, 0x9a9aa0, 5));
+  caja(1.6, 2.8, 0.25, K.toon(0x6e4628), -w / 4, 1.4, 3.6, g);
+  [w / 6, w / 2 - 1.3].forEach(xx => { caja(1.2, 1.2, 0.2, velaMat, xx, h * 0.35, 3.58, g); caja(1.4, 0.2, 0.3, madera, xx, h * 0.35 - 0.7, 3.6, g); });
+  caja(1.2, 1.2, 0.2, velaMat, -w / 4, h * 0.78, 3.58, g);
+  return g;
+}
+const casasP = [];
+[[-44, 1], [-32, -1], [-30, 1], [-18, -1], [-16, 1], [-4, -1], [-2, 1], [10, -1], [12, 1], [24, -1], [26, 1], [38, -1]].forEach(([x, l], i) =>
+  casasP.push(casita(x, l, 9 + (i % 3), 6 + (i % 2) * 2, [0xf0e2c0, 0xe8d4a8, 0xf4ead2][i % 3], [0xa0522d, 0x8a4a2a, 0x7a6a3a][i % 3])));
+// iglesia, pozo, barriles, carreta, faroles, cerca
+const iglesia = new THREE.Group(); iglesia.position.set(54, 0, 0); pueblo.add(iglesia);
+caja(10, 9, 14, K.toon(0xd8cbb0), 0, 4.5, 0, iglesia); caja(5, 18, 5, K.toon(0xcfc0a0), -2, 9, 0, iglesia);
+iglesia.add(K.malla(new THREE.ConeGeometry(3.8, 6, 4), K.toon(0x5a5a62), -2, 21, 0)).children;
+iglesia.children[iglesia.children.length - 1].rotation.y = Math.PI / 4;
+caja(1.2, 1.6, 0.3, velaMat, -2, 13, 2.6, iglesia);
+const pozo = new THREE.Group(); pozo.position.set(6, 0, 0); pueblo.add(pozo);
+pozo.add(K.malla(new THREE.CylinderGeometry(1.6, 1.7, 1.6, 16), K.toon(0x9e927e), 0, 0.8, 0));
+[-1.3, 1.3].forEach(x => caja(0.25, 3.5, 0.25, K.toon(0x6e4628), x, 2.4, 0, pozo));
+pozo.add(K.malla(new THREE.ConeGeometry(2.4, 1.4, 4), K.toon(0x8a4a2a), 0, 4.6, 0));
+[[-8, 4], [-7, 5], [18, -4], [30, 4]].forEach(([x, z]) => pueblo.add(K.malla(new THREE.CylinderGeometry(0.7, 0.6, 1.5, 12), K.toon(0x8a5a35), x, 0.75, z)));
+const carreta = new THREE.Group(); carreta.position.set(-22, 0, -4.5); pueblo.add(carreta);
+caja(4, 0.4, 2.2, K.toon(0x8a5a35), 0, 1.4, 0, carreta); caja(4, 1, 0.2, K.toon(0x8a5a35), 0, 2, 1.1, carreta);
+[-1.2, 1.2].forEach(x => { const r3 = K.malla(new THREE.TorusGeometry(0.8, 0.12, 6, 16), K.toon(0x5a3a22), x, 0.85, 1.3); carreta.add(r3); });
+const faroPueblo = [];
+[-40, -20, 0, 20, 40].forEach(x => [-1, 1].forEach(l => {
+  const g = new THREE.Group(); g.position.set(x + l * 3, 0, l * 7.5); pueblo.add(g);
+  g.add(K.malla(new THREE.CylinderGeometry(0.1, 0.14, 4, 8), K.toon(0x2a2a2e), 0, 2, 0));
+  g.add(K.malla(new THREE.BoxGeometry(0.6, 0.8, 0.6), velaMat, 0, 4.3, 0)); faroPueblo.push(g);
+}));
+for (let i = 0; i < 10; i++) arbol(pueblo, -56 + i * 13, -24 - (i % 2) * 4, 1.3);
+// los vecinos
+const platica = [['campesino', 4, 3], ['campesina', 7.8, 3.6], ['campesino', 10.5, 2.4]].map(([tp, x, z]) => new Personaje2D(tp, 4.4).agregar(pueblo, x, z));
+const rezando = new Personaje2D('campesina', 4.4).agregar(pueblo, -16, -8);
+const visita = new Personaje2D('campesino', 4.4).agregar(pueblo, -14.5, 8);
+const vecino = new Personaje2D('campesina', 4.4).agregar(pueblo, -18.6, 9.6); vecino.malla.visible = false;
+const extrasPueblo = [];
+for (let i = 0; i < 8; i++) extrasPueblo.push(new Personaje2D(i % 2 ? 'campesina' : 'campesino', 4.0, 0.4).agregar(pueblo, -40 + i * 10, (i % 2 ? 1 : -1) * (5 + i % 3), 0));
+
+// ======================================================== animación
+let temblor = 0, destello = 0, T = 0;
+function palomita(ctx, x, y, prog, ok = true) {
+  if (prog <= 0) return;
+  const k = K.rebote(Math.min(1, prog)) * 95, X = x * K.ANCHO, Y = y * K.ALTO;
+  ctx.save(); ctx.beginPath(); ctx.arc(X, Y, k, 0, 7);
+  ctx.fillStyle = ok ? '#3cbf5a' : '#e23c3c'; ctx.fill(); ctx.lineWidth = 12; ctx.strokeStyle = '#1b1210'; ctx.stroke();
+  ctx.lineWidth = k * 0.22; ctx.strokeStyle = '#fff'; ctx.lineCap = 'round'; ctx.beginPath();
+  if (ok) { ctx.moveTo(X - k * 0.45, Y); ctx.lineTo(X - k * 0.1, Y + k * 0.35); ctx.lineTo(X + k * 0.5, Y - k * 0.35); }
+  else { ctx.moveTo(X - k * 0.4, Y - k * 0.4); ctx.lineTo(X + k * 0.4, Y + k * 0.4); ctx.moveTo(X - k * 0.4, Y + k * 0.4); ctx.lineTo(X + k * 0.4, Y - k * 0.4); }
+  ctx.stroke(); ctx.restore();
+}
+const enCuarto = (x, y, z) => [XR + x, y, z];
+function luzCiudad(k) {   // 0 = todo apagado, 1 = todo encendido
+  mVent.forEach((m, i) => ventEncendida(m, cl(k * 6 - i)));
+  focoMat.color.set(0x777766).lerp(new THREE.Color(0xfff2a0), cl(k * 2)); focoMat.emissive.set(0).lerp(new THREE.Color(0xffc840), cl(k * 2));
+  neones.forEach((n, i) => (n.visible = k > 0.2 + i * 0.12));
+}
+function velas(k) { velaMat.color.set(0x2a2620).lerp(new THREE.Color(0xffd27a), k); velaMat.emissive.set(0).lerp(new THREE.Color(0xd08a20), k); }
+const W = (P, k) => P.w(k);
+
+const FRASES = [
+  { // 0. ¿Por qué te despiertas a las tres de la mañana, si querías dormir ocho horas seguidas?
+    amb: ['noche'],
+    tomas: [[0, (u, d) => { const k = K.suave(u / (d * 0.45)); return { pos: lerp([0, 40, 60], [-2, 9, 12], k), mira: lerp([0, 10, -60], [-6, 8, -10], k), fov: 46 }; }],
+            [(d) => d * 0.45, u => ({ pos: enCuarto(-2.2 + u * 0.2, 5, 8.5 - u * 0.4), mira: enCuarto(-2.0, 3.4, -3.5), fov: 44 })]],
+    act: (u, d) => { luzCiudad(0.7); acostado(0); ponerHora(3, 0); reloj.rotation.z = 0; },
+    pj: [[enCama, (u, d) => ({ inclina: inclinaCama, cara: u / d > 0.6 ? 'cansado' : 'sorpresa', brazos: [25, 25], codos: [20, 20] })]],
+    over: (ctx, u, d) => { if (u > d * 0.45) K.letrero(ctx, '3:00 AM', 0.5, 0.17, (u - d * 0.45) / 0.3, { tam: 190, color: '#ff5050' }); },
+  },
+  { // 1. Todos creemos que dormir bien es caer como piedra y no abrir los ojos hasta que suene la alarma.
+    amb: ['cuarto'],
+    tomas: [[0, u => ({ pos: enCuarto(-1.2, 5.6, 13 - u * 0.4), mira: enCuarto(-1.2, 2.8, -3.5), fov: 50 })],
+            [(d) => d * 0.72, u => ({ pos: enCuarto(5.5, 4.4, 1.5), mira: enCuarto(3.6, 3.4, -4.6), fov: 40 })]],
+    act: (u, d) => { const p = u / d, caida = K.acelera(cl((p - 0.12) / 0.16));
+      const cayendo = p < 0.28;
+      dormilon.malla.visible = cayendo; enCama.malla.visible = !cayendo; inclinaCama = 0;
+      dormilon.malla.position.set(1.6 - caida * 1.2, 0.3 + caida * 1.2, 0.6); dormilon.malla.rotation.set(0, 0, caida * 1.35);
+      temblor = p > 0.28 && p < 0.36 ? 1 - (p - 0.28) / 0.08 : 0;
+      ponerHora(p < 0.72 ? 23 : 7, 0); reloj.rotation.z = p > 0.8 ? Math.sin(T * 60) * 0.12 : 0; },
+    fin: () => { reloj.rotation.z = 0; dormilon.malla.visible = false; enCama.malla.visible = true; },
+    pj: [[dormilon, () => ({ cara: 'feliz', brazos: [150, 150], codos: [10, 10] })],
+         [enCama, (u, d) => ({ inclina: 0, cara: u / d < 0.8 ? 'dormido' : 'sorpresa', zzz: u / d > 0.35 && u / d < 0.8 })]],
+    over: (ctx, u, d) => { const p = u / d; K.letrero(ctx, '¡PUM!', 0.5, 0.17, (p - 0.28) / 0.12, { tam: 190 });
+      if (p > 0.45 && p < 0.72) K.letrero(ctx, '8 H', 0.5, 0.17, (p - 0.45) / 0.1, { tam: 200, color: '#ffffff', giro: 0 });
+      K.letrero(ctx, '¡RIIING!', 0.5, 0.17, (p - 0.8) / 0.12, { tam: 170, color: '#ff5050', giro: 0.1 }); },
+  },
+  { // 2. Pero tu cerebro no duerme en línea recta. Duerme en ciclos.
+    amb: ['sueno'],
+    tomas: [[0, u => ({ pos: [XM - 40 + u * 2, 5, 46], mira: [XM - 42 + u * 2, 1, 30], fov: 48 })],
+            [(d, P) => W(P, 8) - 0.1, (u, d) => ({ pos: [XM + 20, 22, 70 - u * 6], mira: [XM + 30, 13, 0], fov: 50 })]],
+    act: (u, d, P) => { camaRecta.position.x = XM - 55 + u * 8; ponerCarrito(0); },
+    over: (ctx, u, d, P) => { if (u < W(P, 8)) palomita(ctx, 0.5, 0.2, (u - W(P, 5)) / 0.2, false); },
+  },
+  { // 3. Cada ciclo dura más o menos noventa minutos.
+    amb: ['sueno'],
+    tomas: [[0, (u, d) => { const p = carrito.position; return { pos: [p.x + 4, p.y + 4, 26], mira: [p.x + 6, p.y, 0], fov: 50 }; }]],
+    act: (u, d) => ponerCarrito(uDeX(-12) + (uDeX(6) - uDeX(-12)) * K.suave(u / d)),
+    pj: [[enCarrito, () => ({ inclina: 1, cara: 'feliz', brazos: [15, 150], codos: [10, 10] })]],
+    over: (ctx, u, d) => K.letrero(ctx, '90 MIN', 0.5, 0.17, (u / d - 0.4) / 0.2, { tam: 210 }),
+  },
+  { // 4. Primero sueño ligero, luego sueño profundo, y al final el sueño REM, donde tienes los sueños más locos.
+    amb: ['sueno'],
+    tomas: [[0, (u, d) => { const p = carrito.position; return { pos: [p.x + 2, p.y + 5, 28], mira: [p.x + 3, p.y - 1, 0], fov: 52 }; }],
+            [(d, P) => W(P, 13), (u) => { const p = carrito.position; return { pos: [p.x + 10, p.y + 3, 18], mira: [p.x + 4, p.y + 2, -2], fov: 52 }; }]],
+    act: (u, d, P) => {
+      const claves = [[0, uDeX(6)], [W(P, 4), uDeX(10)], [W(P, 6), uDeX(14)], [W(P, 10), uDeX(24)], [W(P, 13), uDeX(32)], [d, uDeX(35)]];
+      let uu = claves[0][1]; for (let i = 0; i < claves.length - 1; i++) if (u >= claves[i][0]) uu = claves[i][1] + (claves[i + 1][1] - claves[i][1]) * K.suave((u - claves[i][0]) / Math.max(0.1, claves[i + 1][0] - claves[i][0]));
+      ponerCarrito(uu); },
+    pj: [[enCarrito, (u, d, P) => ({ inclina: u > W(P, 13) ? 0.7 : 0, cara: u > W(P, 13) ? 'sorpresa' : 'dormido', zzz: u < W(P, 13), brazos: u > W(P, 13) ? [150, 150] : [15, 15], codos: [10, 10] })]],
+  },
+  { // 5. En una noche das de cuatro a seis vueltas a ese ciclo.
+    amb: ['sueno'],
+    tomas: [[0, (u, d) => ({ pos: [XM + 100, 45 + u, 150 - u * 4], mira: [XM + 100, 12, 0], fov: 52 })]],
+    act: (u, d) => ponerCarrito(uDeX(35) + (uDeX(205) - uDeX(35)) * K.suave(u / d)),
+    over: (ctx, u, d) => K.letrero(ctx, '4 A 6 VUELTAS', 0.5, 0.17, (u / d - 0.3) / 0.2, { tam: 150 }),
+  },
+  { // 6. Y entre un ciclo y otro, es normal despertar unos segundos... aunque casi nunca lo recuerdes.
+    amb: ['sueno'],
+    tomas: [[0, (u, d) => { const p = carrito.position; return { pos: [p.x + 3, p.y + 3, 14], mira: [p.x - 0.5, p.y + 2.2, 0], fov: 44 }; }]],
+    act: (u, d) => ponerCarrito(uDeX(78) + (uDeX(81) - uDeX(78)) * (u / d)),
+    pj: [[enCarrito, (u, d) => { const p = u / d, abierto = p > 0.3 && p < 0.55; return { inclina: abierto ? 0.45 : 0, cara: abierto ? 'cansado' : 'dormido', zzz: !abierto, brazos: [15, abierto ? 60 : 15], codos: [10, 90] }; }]],
+    over: (ctx, u, d) => { const p = u / d; if (p > 0.3 && p < 0.6) K.letrero(ctx, '¿EH?', 0.62, 0.2, (p - 0.3) / 0.08, { tam: 160, color: '#ffffff' });
+      if (p > 0.62) palomita(ctx, 0.5, 0.2, (p - 0.62) / 0.1); },
+  },
+  { // 7. ¿Y lo más raro? Hace siglos, en Europa, mucha gente dormía en dos partes.
+    amb: ['noche'],
+    tomas: [[0, (u, d) => { const k = K.suave(u / d); return { pos: lerp([XP - 70, 40, 60], [XP - 30, 16, 34], k), mira: [XP, 3, 0], fov: 48 }; }]],
+    act: () => { velas(0); },
+    over: (ctx, u, d) => { K.letrero(ctx, 'HACE SIGLOS', 0.5, 0.15, u / 0.3, { tam: 150, color: '#ffffff', giro: 0 });
+      K.letrero(ctx, '1 + 2', 0.5, 0.24, (u / d - 0.6) / 0.15, { tam: 170 }); },
+  },
+  { // 8. Un primer sueño, luego una hora despiertos platicando, rezando o hasta visitando a los vecinos...
+    amb: ['noche'],
+    tomas: [[0, u => ({ pos: [XP - 42 + u * 2, 6, 2], mira: [XP + 10, 4, 0], fov: 50 })],
+            [(d, P) => W(P, 5), u => ({ pos: [XP + 7.4 + u * 0.3, 5, -4.2], mira: [XP + 7.4, 4, 3], fov: 52 })],
+            [(d, P) => W(P, 8) - 0.05, u => ({ pos: [XP - 15, 4.8, 3 + u * 0.3], mira: [XP - 16, 4.4, -9], fov: 44 })],
+            [(d, P) => W(P, 10) - 0.05, u => ({ pos: [XP - 13, 5, -6 - u * 0.3], mira: [XP - 17, 4.2, 9], fov: 46 })]],
+    act: (u, d, P) => { velas(K.suave((u - W(P, 3)) / 0.5));
+      vecino.malla.visible = u > W(P, 12); },
+    fin: () => { vecino.malla.visible = false; },
+    pj: [...platica.map((p, i) => [p, (u, d, P) => ({ cara: u > W(P, 3) ? 'feliz' : 'dormido', habla: u > W(P, 5) && i !== 1, objeto: i === 2 ? 'vela' : null, brazos: [15, i === 2 ? 70 : 40], codos: [10, i === 2 ? 60 : 80] })]),
+         [rezando, () => ({ cara: 'dormido', brazos: [35, 35], codos: [115, 115], objeto: null })],
+         [visita, (u, d, P) => ({ cara: 'feliz', objeto: 'vela', brazos: [u > W(P, 11) ? 120 + Math.abs(Math.sin(T * 14)) * 20 : 15, 70], codos: [40, 60], voltear: true })],
+         [vecino, () => ({ cara: 'sorpresa', brazos: [15, 15] })]],
+    over: (ctx, u, d, P) => { if (u < W(P, 3)) K.letrero(ctx, '1ER SUEÑO', 0.5, 0.17, u / 0.25, { tam: 160, color: '#ffffff', giro: 0 });
+      else if (u < W(P, 7)) K.letrero(ctx, '1 HORA DESPIERTOS', 0.5, 0.17, (u - W(P, 3)) / 0.25, { tam: 120 });
+      K.letrero(ctx, '¡TOC TOC!', 0.6, 0.2, (u - W(P, 12)) / 0.25, { tam: 140, color: '#ffffff' }); },
+  },
+  { // 9. y después, el segundo sueño.
+    amb: ['noche'],
+    tomas: [[0, (u, d) => ({ pos: [XP + 30 - u * 2, 14 + u, 1], mira: [XP - 20, 3, 0], fov: 50 })]],
+    act: (u, d) => { velas(1 - K.suave(u / (d * 0.6))); },
+    over: (ctx, u, d) => { K.letrero(ctx, '2DO SUEÑO', 0.5, 0.17, (u / d - 0.3) / 0.2, { tam: 170 });
+      [0.25, 0.5, 0.75].forEach((x, i) => K.letrero(ctx, 'Zzz', x, 0.32 - ((T * 0.3 + i * 0.3) % 1) * 0.05, (u / d - 0.5 - i * 0.08) / 0.15, { tam: 90, color: '#ffffff' })); },
+  },
+  { // 10. Eso cambió cuando llegó la luz artificial y todos empezamos a desvelarnos.
+    amb: ['noche'],
+    tomas: [[0, (u, d) => ({ pos: [2, 4 + u * 3, 30 - u * 3], mira: [0, 7, -40], fov: 50 })],
+            [(d) => d * 0.6, u => ({ pos: [-2.5, 3.2, 1 - u], mira: [-7.6, 3.5, -12], fov: 46 })]],
+    act: (u, d) => luzCiudad(K.suave(u / (d * 0.55))),
+    over: (ctx, u, d) => K.letrero(ctx, '¡LUZ!', 0.5, 0.17, (u / d - 0.12) / 0.15, { tam: 200 }),
+  },
+  { // 11. Así que si te despiertas a mitad de la noche, no te asustes.
+    amb: ['cuarto'],
+    tomas: [[0, u => ({ pos: enCuarto(-2.4 + u * 0.2, 5, 8.5 - u * 0.4), mira: enCuarto(-2.0, 3.4, -3.5), fov: 44 })]],
+    act: (u, d) => { acostado(1 - K.frena(cl((u / d) / 0.2))); ponerHora(3, 0); luzCiudad(1); },
+    pj: [[enCama, (u, d) => ({ inclina: inclinaCama, cara: u / d < 0.5 ? 'sorpresa' : 'normal', zzz: false, brazos: u / d < 0.5 ? [60, 60] : [25, 25], codos: [100, 20] })]],
+    over: (ctx, u, d) => K.letrero(ctx, '3:00 AM', 0.5, 0.17, u / 0.3, { tam: 180, color: '#ff5050' }),
+  },
+  { // 12. Tal vez no duermes mal... solo terminaste un ciclo.
+    amb: ['cuarto'],
+    tomas: [[0, (u, d) => { const k = K.suave((u / d - 0.5) / 0.4); return { pos: lerp(enCuarto(-2.2, 5, 8.5), enCuarto(-1.2, 5.6, 13), k), mira: lerp(enCuarto(-2, 3.4, -3.5), enCuarto(-1.2, 2.8, -3.5), k), fov: 46 }; }]],
+    act: (u, d) => acostado(K.suave(cl((u / d - 0.55) / 0.3))),
+    pj: [[enCama, (u, d) => ({ inclina: inclinaCama, cara: u / d < 0.75 ? 'feliz' : 'dormido', zzz: u / d > 0.8, brazos: [25, u / d < 0.55 ? 150 : 25], codos: [20, 25] })]],
+    over: (ctx, u, d) => { K.letrero(ctx, 'CICLO', 0.42, 0.17, (u / d - 0.5) / 0.15, { tam: 180 }); palomita(ctx, 0.75, 0.17, (u / d - 0.6) / 0.15); },
+  },
+  { // 13. Eso sí: si te cuesta volver a dormir y amaneces agotado, vale la pena ir al médico.
+    amb: ['dia'],
+    tomas: [[0, u => ({ pos: [1, 4.2, clinicaZ + 18 - u * 0.8], mira: [5, 3.5, clinicaZ + 4], fov: 48 })],
+            [(d) => d * 0.6, u => ({ pos: [1.5, 4.8, clinicaZ + 15 - u * 0.4], mira: [6.6, 4, clinicaZ + 1], fov: 46 })]],
+    act: (u, d) => { luzCiudad(0); dormilonCalle.malla.position.z = clinicaZ + 9 - 6 * K.suave(u / d); },
+    pj: [[dormilonCalle, (u, d) => ({ cara: u / d < 0.6 ? 'cansado' : 'feliz', camina: u / d < 0.85, brazos: [15, 15] })],
+         [medico, (u, d) => ({ cara: 'feliz', habla: u / d > 0.6, brazos: [15, 140 + Math.sin(T * 8) * 20], codos: [10, 10] })]],
+    over: (ctx, u, d) => palomita(ctx, 0.5, 0.17, (u / d - 0.8) / 0.15),
+  },
+];
+
+// ===================================================== vida de fondo
+function vida(n, u, dur, t) {
+  const re = Math.round(t * 30) % 3 === 0;
+  const ciudad = [0, 10, 13].includes(n), noche = n !== 13;
+  genteCiudad.forEach((g, i) => { g.malla.visible = ciudad;
+    if (ciudad) g.actualizar(t, camara, noche ? { cara: 'cansado', objeto: 'celular', brazos: [15, 60], codos: [10, 95] }
+                                             : { cara: i % 2 ? 'feliz' : 'normal', objeto: null, camina: true, brazos: [15, 15] }, re); });
+  avesCiudad(t, n === 13);
+  humosP.forEach(h => h(t, n >= 7 && n <= 9));
+  if (n >= 7 && n <= 9) extrasPueblo.forEach((e, i) => e.actualizar(t, camara, { cara: n === 8 ? 'feliz' : 'dormido', objeto: i % 3 === 0 ? 'vela' : null, habla: n === 8 && i % 2 === 0, brazos: [15, i % 3 === 0 ? 70 : 15], codos: [10, 60] }, re));
+  raros.forEach((m, i) => { m.rotation.y = t * (0.5 + (i % 3) * 0.3); m.position.y += Math.sin(t * 2 + i) * 0.01; });
+  carteles.forEach(c => (c.visible = n >= 2 && n <= 6));
+}
+
+// ===================================================== estilo realista
+// velita en el buró y luces cálidas
+const vela = new THREE.Group(); vela.position.set(3.2, 2.4, -4.4); cuarto.add(vela);
+vela.add(K.malla(new THREE.CylinderGeometry(0.35, 0.4, 0.12, 16), K.toon(0xc9a24a), 0, 0.06, 0));
+vela.add(K.malla(new THREE.CylinderGeometry(0.12, 0.12, 0.8, 12), K.toon(0xfff6dc), 0, 0.5, 0));
+const llama = K.malla(new THREE.SphereGeometry(0.11, 10, 8), K.toon(0xffc040, { emissive: 0xffa020, emissiveIntensity: 3 }), 0, 1.05, 0, false);
+llama.scale.y = 1.8; vela.add(llama);
+const luzLampara = new THREE.PointLight(0xffb060, 40, 22, 1.6); luzLampara.position.set(4.8, 4.6, -5.0); cuarto.add(luzLampara);
+const luzVela = new THREE.PointLight(0xff9a40, 8, 8, 1.8); luzVela.position.set(3.2, 3.6, -4.0); cuarto.add(luzVela);
+const lucesPueblo = [-20, 0, 20].map(x => { const l = new THREE.PointLight(0xffa850, 0, 26, 1.5); l.position.set(XP + x, 4.4, 0); escena.add(l); return l; });
+const lucesCiudad = [0, -14, -28].map(z => { const l = new THREE.PointLight(0xffd080, 0, 24, 1.5); l.position.set(0, 6, z); escena.add(l); return l; });
+R.convertir(escena);
+R.neblina(escena, 0x1b2348, 0.01);
+const nieve = R.particulas(escena, 500, 0xffffff, 0.16);
+const polvito = R.particulas(escena, 260, 0xffd9a0, 0.08);
+const chispas = R.particulas(escena, 320, 0xffc8ff, 0.22);
+const NIEBLA = { noche: [0x1b2348, 0.011], cuarto: [0x2a1d30, 0.0], sueno: [0x5a3a8a, 0.006], dia: [0xc8dcf0, 0.004] };
+function atmosfera(amb, t, tm) {
+  const [c, d] = NIEBLA[amb] || NIEBLA.noche;
+  escena.fog.color.set(c); escena.fog.density = d;
+  r.gl.toneMappingExposure = amb === 'noche' ? 1.35 : amb === 'cuarto' ? 1.15 : 1.05;
+  const foco = camara.position.distanceTo(new THREE.Vector3(...tm.mira));
+  R.enfocar(r, foco, amb === 'cuarto' ? 1.4 : 1);
+  nieve(t, camara, amb === 'noche', 0.5);
+  polvito(t, camara, amb === 'cuarto', 0.15);
+  chispas(t, camara, amb === 'sueno', 0.25);
+  llama.scale.set(1 + Math.sin(t * 23) * 0.15, 1.8 + Math.sin(t * 17) * 0.3, 1);
+  luzVela.intensity = 8 + Math.sin(t * 19) * 1.5;
+  const encendidoCiudad = focoMat.emissive.r;
+  lucesCiudad.forEach(l => (l.intensity = 30 * encendidoCiudad));
+  const velasK = velaMat.emissive.r / 0.82;
+  lucesPueblo.forEach(l => (l.intensity = 12 + 30 * velasK));
+}
+
+// ===================================================== cada cuadro
+const P_DE = n => ({ w: k => datos.frases[n].palabras[k] });
+window.cuadro = (t) => {
+  T = t;
+  let n = 0;
+  while (n + 1 < datos.frases.length && t >= datos.frases[n + 1].ini) n++;
+  temblor = 0; destello = 0;
+  for (let i = 0; i <= n; i++) {
+    const F = FRASES[i], ini = datos.frases[i].ini, dur = datos.frases[i].fin - ini;
+    const u = i < n ? dur : t - ini;
+    if (F.act) F.act(u, dur, P_DE(i));
+    if (i < n && F.fin) F.fin();
+  }
+  const F = FRASES[n], ini = datos.frases[n].ini, dur = datos.frases[n].fin - ini, u = t - ini, P = P_DE(n);
+  let ti = 0;
+  const inicioToma = j => (typeof F.tomas[j][0] === 'function' ? F.tomas[j][0](dur, P) : F.tomas[j][0]);
+  while (ti + 1 < F.tomas.length && u >= inicioToma(ti + 1)) ti++;
+  const ut = u - inicioToma(ti);
+  const tm = F.tomas[ti][1](ut, dur, P);
+  const enCuartoAhora = tm.mira[0] < -200;
+  const amb = enCuartoAhora ? 'cuarto' : F.amb[0];
+  K.ambiente(mundo, amb);
+  const deNoche = amb !== 'dia';
+  solG.visible = !deNoche; nubes.forEach(c => (c.visible = !deNoche)); nocheG.visible = deNoche;
+  luna.position.set(camara.position.x + 250, 220, -800);
+  PASTO.color.set(amb === 'dia' ? 0x5f9a4a : amb === 'sueno' ? 0x6a5ab0 : 0x2f4a3a);
+  const pos = tm.pos.toArray ? tm.pos.toArray() : tm.pos;
+  atmosfera(amb, t, tm);
+  const sacude = temblor * 0.35;
+  camara.position.set(pos[0] + Math.sin(t * 91) * sacude, pos[1] + Math.sin(t * 77) * sacude, pos[2]);
+  camara.lookAt(...tm.mira);
+  camara.fov = tm.fov * (1 + 0.08 * (1 - K.frena(ut / 0.25)));
+  camara.updateProjectionMatrix();
+  luz.target.position.set(tm.mira[0], 0, tm.mira[2]);
+  luz.position.copy(luz.target.position).add(luz.userData.offset);
+  luz.target.updateMatrixWorld();
+  vida(n, u, dur, t);
+  (F.pj || []).forEach(([pj, est]) => pj.actualizar(t, camara, est(u, dur, P)));
+  // el dormilón acostado no debe girar hacia la cámara
+  if (dormilon.malla.visible) dormilon.malla.rotation.y = 0;
+  r.efecto.render(escena, camara);
+  r.ctx.drawImage(r.gl.domElement, 0, 0);
+  if (F.over) F.over(r.ctx, u, dur, P);
+  K.destello(r.ctx, destello);
+  K.subtitulos(r.ctx, datos.subs, t);
+  return r.salida.toDataURL('image/jpeg', 0.9);
+};
+window.listo = Promise.resolve();
+</script>
+</body>
+</html>

@@ -1,0 +1,419 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Juntas de concreto 3D</title>
+<script type="importmap">
+{ "imports": {
+    "three": "/motor3d/node_modules/three/build/three.module.js",
+    "three/addons/": "/motor3d/node_modules/three/examples/jsm/"
+} }
+</script>
+<style>body{margin:0;background:#000}</style>
+</head>
+<body>
+<script type="module">
+// ¿Por qué las carreteras de concreto tienen rayas? — versión 3D.
+// Los tiempos (frases, palabras y subtítulos) llegan en un JSON que arma generar3d.py.
+import * as THREE from 'three';
+import * as K from '/motor3d/kit.js';
+import { Personaje2D } from '/motor3d/personaje2d.js';
+
+const datos = await (await fetch(new URLSearchParams(location.search).get('datos'))).json();
+window.DURACION = datos.duracion;
+
+const r = K.crearRender();
+const { escena, camara } = r;
+const cielo = K.cielo(escena, '#3f96ea', '#ffe0b0');
+const luz = K.luces(escena, [35, 55, 25]);
+const mundo = { cielo, luz, hemi: luz.userData.hemi };
+const solG = K.sol(escena, 160, 190, -700, 40);
+K.nube(escena, -90, 110, -500, 2.2);
+K.nube(escena, 160, 140, -650, 2.8);
+K.nube(escena, 420, 150, -700, 2.4);
+K.nube(escena, 800, 130, -600, 2.6);
+K.desierto(escena);
+// más mesetas a lo largo de todo el desierto (los escenarios están repartidos en x)
+const rojo = K.toon(0xe56a6a), rojoOsc = K.toon(0xc44d62);
+for (let i = 0; i < 14; i++) {
+  const x = -250 + i * 110, z = -260 - (i % 3) * 70, rr = 40 + (i % 4) * 15, h = 30 + (i % 3) * 14;
+  escena.add(K.malla(new THREE.CylinderGeometry(rr * 0.8, rr, h, 7), rojo, x, h / 2, z, false),
+             K.malla(new THREE.CylinderGeometry(rr * 0.82, rr * 0.82, h * 0.12, 7), rojoOsc, x, h * 0.94, z, false));
+}
+
+const CONCRETO = K.toon(0xcac9c3);
+const caja = (w, h, d, mat, x, y, z) => { const m = K.malla(new THREE.BoxGeometry(w, h, d), mat, x, y, z); escena.add(m); return m; };
+const v3 = (x, y, z) => [x, y, z];
+
+// =============================================================== ESCENARIO A
+// carretera principal con pueblo y obra (x = 0)
+const colores = [0xe9b96e, 0xd98b5f, 0x9ec7a8, 0xf0d08a, 0xc9a2d6, 0x8fb7e0];
+for (let i = 0; i < 9; i++) K.casa(escena, -18 - (i % 3) * 11, -20 - i * 13, 7 + (i % 3) * 2, 5 + (i % 4) * 3, 7, colores[i % 6]);
+K.tanqueAgua(escena, -36, -75);
+for (let z = 10; z > -200; z -= 24) K.poste(escena, 16, z);
+const ANCHO_C = 9, LARGO = 420, Z0 = 60;
+caja(ANCHO_C, 0.3, LARGO, CONCRETO, 0, 0.15, Z0 - LARGO / 2);
+const orilla = K.toon(0x8f8e88);
+[-1, 1].forEach(l => caja(0.5, 0.36, LARGO, orilla, l * (ANCHO_C / 2 + 0.2), 0.18, Z0 - LARGO / 2));
+const matJunta = K.sinContorno(new THREE.MeshToonMaterial({ color: 0x4a4946, emissive: 0x000000 }));
+for (let z = Z0 - 4.5; z > Z0 - LARGO; z -= 4.5) escena.add(K.malla(new THREE.BoxGeometry(ANCHO_C, 0.06, 0.16), matJunta, 0, 0.31, z, false));
+escena.add(K.malla(new THREE.BoxGeometry(0.1, 0.06, LARGO), matJunta, 0, 0.31, Z0 - LARGO / 2, false));
+const mezcA = K.mezcladora(escena, 12.5, -16, -0.35);
+K.valla(escena, 6.2, -2, 0.1); K.valla(escena, 6.2, -24, -0.1);
+function cono(x, z) {
+  const c = new THREE.Group(), n = K.toon(0xff7a1a), b = K.toon(0xffffff);
+  c.add(K.malla(new THREE.ConeGeometry(0.45, 1.3, 16), n, 0, 0.75, 0), K.malla(new THREE.CylinderGeometry(0.29, 0.34, 0.22, 16), b, 0, 0.78, 0),
+        K.malla(new THREE.BoxGeometry(1.0, 0.12, 1.0), n, 0, 0.06, 0));
+  c.position.set(x, 0, z); escena.add(c);
+}
+for (let i = 0; i < 8; i++) cono(ANCHO_C / 2 + 1.0, 6 - i * 7);
+const autoA = K.auto3d(0xd9483b); escena.add(autoA); autoA.rotation.y = Math.PI; autoA.position.set(-2.2, 0.3, 60);
+const obreroA = new Personaje2D('obrero', 4.6).agregar(escena, 7.2, -8);
+const jefeA = new Personaje2D('jefe', 5.2).agregar(escena, 10.2, -10);
+const ingA = new Personaje2D('ingeniero', 4.8).agregar(escena, 13.2, -8.5);
+
+// =============================================================== ESCENARIO H
+// la losa larguísima que se va colando (x = -150)
+const XH = -150;
+const losaH = caja(7, 0.6, 1, CONCRETO, XH, 0.3, 0);
+const mezcH = K.mezcladora(escena, XH + 6.5, 0, Math.PI);
+for (let i = 0; i < 3; i++) cono(XH + 4.6, 8 - i * 9);
+const obreroH = new Personaje2D('obrero', 4.6).agregar(escena, XH + 5.5, 0);
+const jefeH = new Personaje2D('jefe', 5.2).agregar(escena, XH + 5.6, -36);
+const H0 = 12;
+function losaLarga(L) { losaH.scale.z = L; losaH.position.z = H0 - L / 2; return H0 - L; }
+
+// =============================================================== ESCENARIO B
+// losa que se estira y se encoge (x = 150)
+const XB = 150;
+caja(22, 0.4, 7, K.toon(0xb9926a), XB, 0.2, 0);
+const losaB = caja(10, 1.4, 4, CONCRETO, XB, 1.1, 0);
+const extraB = caja(1, 1.42, 4.02, K.toon(0xffd600), XB + 5, 1.1, 0);
+extraB.visible = false;
+const flechasAfuera = [-1, 1].map(l => { const f = K.flecha3d(0xffd600); f.rotation.z = -l * Math.PI / 2; f.scale.setScalar(0.8); f.visible = false; escena.add(f); return f; });
+const flechasAdentro = [-1, 1].map(l => { const f = K.flecha3d(0x6fb6ff); f.rotation.z = l * Math.PI / 2; f.scale.setScalar(0.8); f.visible = false; escena.add(f); return f; });
+const obreroB = new Personaje2D('obrero', 4.6).agregar(escena, XB - 3.5, 8);
+
+// =============================================================== ESCENARIO C
+// aplastar vs jalar (x = 300)
+const XC = 300;
+caja(26, 0.3, 8, K.toon(0xb9926a), XC, 0.15, 0);
+const bloqueC = caja(6, 2.6, 3, CONCRETO, XC, 1.6, 0);
+const mitadesC = [-1, 1].map(l => { const m = caja(3, 2.6, 3, CONCRETO, XC + l * 1.5, 1.6, 0); m.visible = false; return m; });
+const yunqueC = K.yunque(); escena.add(yunqueC); yunqueC.position.set(XC, 40, 0);
+const grietaC = K.grieta(escena, K.camino([XC, 2.92, 1.52], [XC, 0.3, 1.52], 7, 0.25, 3, 'x'), 0.2, 0.2);
+const sogaMat = K.toon(0xa8763e);
+const sogas = [-1, 1].map(() => { const s = K.malla(new THREE.CylinderGeometry(0.09, 0.09, 1, 8), sogaMat, 0, 0, 0); escena.add(s); return s; });
+const tiraC = [-1, 1].map(l => new Personaje2D('obrero', 4.6).agregar(escena, XC + l * 6.5, 1.5));
+function soga(s, a, b) {
+  const A = new THREE.Vector3(...a), B = new THREE.Vector3(...b);
+  s.position.copy(A).add(B).multiplyScalar(0.5); s.scale.y = A.distanceTo(B);
+  s.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), B.clone().sub(A).normalize());
+}
+
+// =============================================================== ESCENARIO D
+// losa vista desde arriba con grietas (x = 450)
+const XD = 450;
+caja(16, 0.6, 16, CONCRETO, XD, 0.3, 0);
+const grietaGrande = K.grieta(escena, K.camino([XD - 8, 0.62, -1], [XD + 8, 0.62, 2], 14, 0.9, 21), 0.28);
+const ramasD = [K.grieta(escena, K.camino([XD - 2, 0.62, 0], [XD - 4, 0.62, 6], 6, 0.5, 5), 0.2),
+                K.grieta(escena, K.camino([XD + 3, 0.62, 1], [XD + 5, 0.62, -6], 6, 0.5, 6), 0.2)];
+const chuecas = [[[-8, -5], [1, -8]], [[8, -3], [2, 4]], [[-4, 8], [-1, 2]], [[8, 6], [3, 8]],
+                 [[-8, 4], [-3, 7]], [[3, -8], [6, -2]], [[-5, -2], [0, -4]]]
+  .map(([a, b], i) => K.grieta(escena, K.camino([XD + a[0], 0.62, a[1]], [XD + b[0], 0.62, b[1]], 9, 0.7, 30 + i), 0.2));
+const jefeD = new Personaje2D('jefe', 5.2).agregar(escena, XD + 6, 11);
+
+// =============================================================== ESCENARIO E
+// losas que se levantan (x = 600)
+const XE = 600;
+caja(80, 0.25, 8, K.toon(0x9a9890), XE - 10, 0.12, 0);
+const losasE = [-1, 1].map(l => {
+  const piv = new THREE.Group(); piv.position.set(XE + l * 10, 0.25, 0);
+  const m = K.malla(new THREE.BoxGeometry(10, 1.4, 7), CONCRETO, -l * 5, 0.7, 0);
+  piv.add(m); escena.add(piv); return piv;
+});
+const flechasE = [-1, 1].map(l => { const f = K.flecha3d(0xffd600); f.rotation.z = l * Math.PI / 2; f.position.set(XE + l * 12.5, 1.6, 0); escena.add(f); return f; });
+const polvoE = K.polvo(escena, XE, 1.2, 0, 12, 5);
+const autoE = K.auto3d(0x2d7fd6); autoE.rotation.y = Math.PI / 2; autoE.position.set(XE - 45, 0.25, 2); escena.add(autoE);
+const choferE = new Personaje2D('chofer', 4.6).agregar(escena, XE - 13, 6.5);
+
+// =============================================================== ESCENARIO L
+// la idea "loca" (x = 750)
+const XL = 750;
+caja(4.5, 0.25, 2.6, K.toon(0x8a5a35), XL, 2.4, -1.5);
+[[-2, -2.6], [2, -2.6], [-2, -0.4], [2, -0.4]].forEach(([a, b]) => caja(0.25, 2.3, 0.25, K.toon(0x6e4628), XL + a, 1.15, b));
+caja(3.6, 0.05, 2.0, K.sinContorno(K.toon(0x3f7fd0)), XL, 2.55, -1.5);
+const ingL = new Personaje2D('ingeniero', 4.8).agregar(escena, XL - 3, 1);
+const jefeL = new Personaje2D('jefe', 5.2).agregar(escena, XL + 3.5, 0.5);
+const focoL = K.foco(); focoL.visible = false; escena.add(focoL);
+
+// =============================================================== ESCENARIO F
+// la cortadora haciendo ranuras (x = 900)
+const XF = 900;
+caja(12, 0.6, 22, CONCRETO, XF, 0.3, 0);
+const ranuraMat = K.sinContorno(K.toon(0x3e3d3a));
+[-5, 5].forEach(z => escena.add(K.malla(new THREE.BoxGeometry(12, 0.05, 0.22), ranuraMat, XF, 0.62, z, false)));
+const ranuraF = K.malla(new THREE.BoxGeometry(1, 0.05, 0.22), ranuraMat, XF - 6, 0.62, 0, false); escena.add(ranuraF);
+const sierra = new THREE.Group();
+sierra.add(K.malla(new THREE.BoxGeometry(1.6, 1.0, 1.4), K.toon(0xffc61a), 0, 1.3, 0.6));
+const disco = K.malla(new THREE.CylinderGeometry(0.75, 0.75, 0.1, 24), K.toon(0xd0d0d8), 0, 0.85, 0);
+disco.rotation.x = Math.PI / 2; disco.rotation.z = Math.PI / 2; sierra.add(disco);
+sierra.add(K.malla(new THREE.CylinderGeometry(0.06, 0.06, 2.4, 8), K.toon(0x333338), -1.2, 2.0, 0.6));
+sierra.position.set(XF - 6, 0, 0); escena.add(sierra);
+const grupoPolvo = new THREE.Group(); escena.add(grupoPolvo);
+const polvoSierra = K.polvo(grupoPolvo, 0, 0.8, 0.4, 8, 2.0, 0xffffff);
+const obreroF = new Personaje2D('obrero', 4.6).agregar(escena, XF - 7, 2.6);
+
+// =============================================================== ESCENARIO G
+// corte transversal: la grieta baja derechita (x = 1050)
+const XG = 1050;
+caja(16, 1.6, 3.4, K.toon(0xc9955f), XG, 0.8, 0);
+const losaG = caja(12, 3.4, 3, CONCRETO, XG, 3.3, 0);
+const mitadesG = [-1, 1].map(l => { const m = caja(6, 3.4, 3, CONCRETO, XG + l * 3, 3.3, 0); m.visible = false; return m; });
+const muesca = K.malla(new THREE.BoxGeometry(0.4, 1.0, 3.04), K.sinContorno(K.toon(0x3a3936)), XG, 4.55, 0, false); escena.add(muesca);
+const sello = K.malla(new THREE.BoxGeometry(0.42, 0.35, 3.06), K.sinContorno(K.toon(0x151515)), XG, 4.85, 0, false); escena.add(sello);
+sello.visible = false;
+const grietaG = K.grieta(escena, K.camino([XG, 4.05, 1.53], [XG, 1.6, 1.53], 8, 0.12, 8, 'x'), 0.18, 0.2);
+
+// ===================================================== ayudas de animación
+const cl = x => Math.min(1, Math.max(0, x));
+const lerp = (a, b, k) => a.map((v, i) => v + (b[i] - v) * k);
+let temblor = 0;
+function palomita(ctx, x, y, prog, ok = true) {
+  if (prog <= 0) return;
+  const k = K.rebote(Math.min(1, prog)) * 95, X = x * K.ANCHO, Y = y * K.ALTO;
+  ctx.save(); ctx.beginPath(); ctx.arc(X, Y, k, 0, 7);
+  ctx.fillStyle = ok ? '#3cbf5a' : '#e23c3c'; ctx.fill(); ctx.lineWidth = 12; ctx.strokeStyle = '#1b1210'; ctx.stroke();
+  ctx.lineWidth = k * 0.22; ctx.strokeStyle = '#fff'; ctx.lineCap = 'round'; ctx.beginPath();
+  if (ok) { ctx.moveTo(X - k * 0.45, Y); ctx.lineTo(X - k * 0.1, Y + k * 0.35); ctx.lineTo(X + k * 0.5, Y - k * 0.35); }
+  else { ctx.moveTo(X - k * 0.4, Y - k * 0.4); ctx.lineTo(X + k * 0.4, Y + k * 0.4); ctx.moveTo(X - k * 0.4, Y + k * 0.4); ctx.lineTo(X + k * 0.4, Y - k * 0.4); }
+  ctx.stroke(); ctx.restore();
+}
+
+// ============================================================== LAS FRASES
+// Cada frase: amb (ambiente), tomas [[inicio, f(u) → {pos, mira, fov}]] (inicio en segundos
+// locales; puede ser función de (dur, P)), act(u, dur, P) para mover cosas,
+// pj: personajes a actualizar, over(ctx, u, dur, P) para letreros.
+const FRASES = [
+  { // 0. ¿Por qué las carreteras de concreto tienen estas rayas?
+    amb: ['dia'],
+    tomas: [[0, (u, d, P) => { const k = K.suave(u / Math.max(0.5, P.w(8) - 0.05));
+               return { pos: lerp([-40, 30, 40], [-12, 12, 14], k), mira: [2, 6, -30], fov: 45 }; }],
+            [(d, P) => P.w(8) - 0.05, u => ({ pos: [-2.5 + u * 0.8, 0.9, 6 - u * 2.5], mira: [1.5, 0.2, -30], fov: 50 })]],
+    act: (u, d, P) => { const b = K.suave((u - P.w(8)) / 0.3) * (0.6 + 0.4 * Math.sin(T * 12));
+      matJunta.color.set(0x4a4946).lerp(new THREE.Color(0xffd600), b); matJunta.emissive.set(0).lerp(new THREE.Color(0xc0a000), b); },
+    fin: () => { matJunta.color.set(0x4a4946); matJunta.emissive.set(0); },
+  },
+  { // 1. Imagina que construyes una carretera ... larguísima.
+    amb: ['dia'],
+    tomas: [[0, (u) => { const z = losaLarga(20 + 25 * u);
+               return { pos: [XH + 24, 8, z + 15], mira: [XH + 3, 1.8, z - 3], fov: 45 }; }],
+            [(d) => d * 0.55, (u, d) => { const k = K.suave(u / (d * 0.45));
+               return { pos: lerp([XH + 14, 10, 30], [XH - 18, 30, 40], k), mira: [XH, 0, -140], fov: 45 }; }]],
+    act: (u, d) => { const p = cl(u / d); const z = losaLarga(20 + 25 * u + 330 * K.suave((p - 0.5) / 0.5));
+      mezcH.position.z = z - 2; mezcH.userData.tambor.rotation.y = T * 2; obreroH.malla.position.z = z + 5; },
+    pj: [[obreroH, () => ({ cara: 'feliz', camina: true, brazos: [15, 150], codos: [10, 10] })]],
+  },
+  { // 2. Lisa, bonita, perfecta.
+    amb: ['dia'],
+    tomas: [[0, u => ({ pos: [XH + 10.5 - u * 0.6, 3.4, -27 - u * 0.6], mira: [XH + 4.4, 3.4, -36], fov: 42 })]],
+    act: () => losaLarga(350),
+    pj: [[jefeH, u => ({ cara: 'feliz', brazos: [15, 150], codos: [10, 25], habla: false })]],
+  },
+  { // 3. Pero llegó el verano.
+    amb: ['dia', 'calor', (u, d) => K.suave(u / d)],
+    tomas: [[0, u => ({ pos: [XB - 4, 1.2, 14], mira: [XB + 8, 45 + u * 8, -150], fov: 52 })],
+            [(d) => d * 0.5, u => ({ pos: [XB - 4.3, 3.3, 12 - u * 0.8], mira: [XB - 5, 3.3, 6], fov: 40 })]],
+    act: () => { losaB.scale.x = 1; extraB.visible = false; },
+    pj: [[obreroB, () => ({ cara: 'calor', brazos: [20, 20] })]],
+  },
+  { // 4. Con el calor, el concreto se estira.
+    amb: ['calor'],
+    tomas: [[0, u => ({ pos: [XB, 4.5 + u * 0.2, 34 - u * 1.5], mira: [XB, 2.2, 0], fov: 44 })]],
+    act: (u, d) => { const k = K.frena(u / d); losaB.scale.x = 1 + 0.12 * k;
+      const mov = Math.sin(T * 9) * 0.3;
+      flechasAfuera.forEach((f, i) => { const l = i ? 1 : -1; f.visible = true; f.position.set(XB + l * (5 * losaB.scale.x + 0.5 + mov), 1.1, 0); });
+      flechasAdentro.forEach(f => (f.visible = false)); },
+    pj: [[obreroB, () => ({ cara: 'calor' })]],
+  },
+  { // 5. Un tramo de cien metros puede crecer casi cuatro centímetros.
+    amb: ['calor'],
+    tomas: [[0, u => ({ pos: [XB, 4.5, 34], mira: [XB, 2.2, 0], fov: 44 })],
+            [(d) => d * 0.45, u => ({ pos: [XB + 9.5 - u * 0.4, 4, 13], mira: [XB + 5.2, 1.2, 0], fov: 40 })]],
+    act: (u, d) => { losaB.scale.x = 1.12; flechasAfuera.forEach(f => (f.visible = false));
+      extraB.visible = u > d * 0.45; const k = K.frena((u - d * 0.5) / 0.5);
+      extraB.scale.x = 0.05 + 0.8 * k; extraB.position.x = XB + 5 * 1.12 - 0.3 + extraB.scale.x / 2; },
+    over: (ctx, u, d) => { if (u < d * 0.45) K.letrero(ctx, '100 M', 0.5, 0.3, (u - 0.1) / 0.4, { tam: 150, color: '#ffffff', giro: 0 });
+                           else K.letrero(ctx, '+4 CM', 0.5, 0.3, (u - d * 0.5) / 0.5, { tam: 200 }); },
+  },
+  { // 6. Y en las noches frías, se encoge otra vez.
+    amb: ['calor', 'noche', u => K.frena(u / 0.5)],
+    tomas: [[0, u => ({ pos: [XB, 4.5, 34], mira: [XB, 2.2, 0], fov: 44 })],
+            [(d) => d * 0.55, u => ({ pos: [XB - 4.3, 3.3, 12.5 - u * 0.6], mira: [XB - 5, 3.3, 6], fov: 40 })]],
+    act: (u, d) => { extraB.visible = false; const k = K.frena(u / (d * 0.6)); losaB.scale.x = 1.12 - 0.2 * k;
+      const mov = Math.sin(T * 9) * 0.3;
+      flechasAdentro.forEach((f, i) => { const l = i ? 1 : -1; f.visible = true; f.position.set(XB + l * (5 * losaB.scale.x + 3.0 - mov), 1.1, 0); }); },
+    fin: () => flechasAdentro.forEach(f => (f.visible = false)),
+    pj: [[obreroB, () => ({ cara: 'frio', tiembla: 1, brazos: [40, 40], codos: [120, 120] })]],
+  },
+  { // 7. El concreto aguanta que lo aplasten, pero no que lo jalen.
+    amb: ['dia'],
+    tomas: [[0, u => ({ pos: [XC + 1, 4.2, 14 - u * 0.5], mira: [XC, 2.6, 0], fov: 46 })],
+            [(d) => d * 0.5, u => ({ pos: [XC, 5, 27], mira: [XC, 2.2, 0], fov: 46 })]],
+    act: (u, d) => { const p = cl(u / d), g = 0.22;
+      yunqueC.visible = p < 0.5;
+      const caida = Math.min(1, p / g); yunqueC.position.set(XC, 2.9 + 27 * (1 - caida * caida), 0);
+      temblor = p >= g && p < g + 0.08 ? 1 - (p - g) / 0.08 : 0;
+      const q = cl((p - 0.5) / 0.5), roto = q > 0.78, sep = roto ? 0.8 * K.frena((q - 0.78) / 0.2) : 0;
+      bloqueC.visible = !roto; mitadesC.forEach((m, i) => { m.visible = roto; m.position.x = XC + (i ? 1 : -1) * (1.5 + sep); });
+      grietaC(q > 0.5 && !roto ? (q - 0.5) / 0.28 : 0);
+      const tira = p >= 0.5;
+      sogas.forEach((s, i) => { const l = i ? 1 : -1; s.visible = tira;
+        if (tira) soga(s, [XC + l * (3 + sep), 1.6, 0], [XC + l * (6.1 + sep), 2.3, 1.6]); });
+      tiraC.forEach((pj, i) => { pj.malla.visible = tira; pj.malla.position.x = XC + (i ? 1 : -1) * (6.5 + sep); }); },
+    fin: () => { yunqueC.visible = false; },
+    pj: [[tiraC[0], (u, d) => ({ cara: u / d > 0.9 ? 'sorpresa' : 'enojado', tiembla: u / d < 0.89 ? 0.5 : 0, brazos: [15, 80], codos: [10, 10], voltear: false })],
+         [tiraC[1], (u, d) => ({ cara: u / d > 0.9 ? 'sorpresa' : 'enojado', tiembla: u / d < 0.89 ? 0.5 : 0, brazos: [80, 15], codos: [10, 10] })]],
+    over: (ctx, u, d) => { const p = u / d; if (p < 0.5) palomita(ctx, 0.5, 0.25, (p - 0.25) / 0.12, true);
+                           else palomita(ctx, 0.5, 0.25, (p - 0.9) / 0.1, false); },
+  },
+  { // 8. Así que, al encogerse... ¡crac! Se agrieta por donde quiere.
+    amb: ['dia'],
+    tomas: [[0, u => ({ pos: [XD + Math.sin(u * 0.15) * 3, 36 - u * 1.2, 5], mira: [XD, 0, 0], fov: 50 })],
+            [(d) => d * 0.78, u => ({ pos: [XD - 10 + u, 2.2, 11], mira: [XD, 0.3, 0], fov: 46 })]],
+    act: (u, d, P) => { const t0 = P.w(4); grietaGrande((u - t0) / 0.5);
+      ramasD.forEach((g, i) => g((u - t0 - 0.25 - i * 0.15) / 0.4)); chuecas.forEach(g => g(0));
+      temblor = u >= t0 && u < t0 + 0.4 ? 1 - (u - t0) / 0.4 : 0; },
+    over: (ctx, u, d, P) => K.letrero(ctx, '¡CRAC!', 0.5, 0.25, (u - P.w(4)) / 0.3, { tam: 220 }),
+  },
+  { // 9. Grietas chuecas, por todos lados.
+    amb: ['dia'],
+    tomas: [[0, u => ({ pos: [XD + Math.sin(u * 0.6) * 5, 34, Math.cos(u * 0.6) * 5], mira: [XD, 0, 0], fov: 52 })],
+            [(d) => d * 0.6, u => ({ pos: [XD + 9.8 - u * 0.4, 3.6, 18], mira: [XD + 6, 3.4, 11], fov: 40 })]],
+    act: (u, d) => { grietaGrande(1); ramasD.forEach(g => g(1)); chuecas.forEach((g, i) => g((u / d - i * 0.06) / 0.3)); },
+    pj: [[jefeD, () => ({ cara: 'sorpresa', brazos: [60, 60], codos: [100, 100] })]],
+  },
+  { // 10. Y en olas de calor, algunas losas se empujan tanto que se levantan de golpe.
+    amb: ['calor'],
+    tomas: [[0, u => ({ pos: [XE + 4, 7, 22 - u * 0.6], mira: [XE, 1.5, 0], fov: 48 })],
+            [(d, P) => Math.min(d * 0.42, P.w(12) - 1.2), u => { const x = autoE.position.x;
+               return { pos: [x - 7, 2.0, 5.5], mira: [x + 5, 1.3, 0], fov: 46 }; }],
+            [(d, P) => P.w(12) - 0.08, u => ({ pos: [XE + 3, 5, 19 + u * 0.8], mira: [XE, 2.5, 0], fov: 50 })]],
+    act: (u, d, P) => { const t0 = P.w(12), q = (u - t0) / 0.3;
+      const ang = u < t0 ? Math.sin(T * 40) * 0.006 * cl(u / 0.6) : 0.38 * K.rebote(cl(q));
+      losasE.forEach((p, i) => (p.rotation.z = (i ? 1 : -1) * ang));
+      flechasE.forEach((f, i) => { const l = i ? 1 : -1; f.visible = u < t0; f.position.x = XE + l * (12.5 + Math.sin(T * 9) * 0.4); });
+      polvoE((u - t0) / 0.8);
+      autoE.position.set(u < t0 ? XE - 45 + 27 * (u / t0) : XE - 18 + 2.5 * K.frena((u - t0) / 0.4), 0.25, 2);
+      temblor = u >= t0 && u < t0 + 0.5 ? 1 - (u - t0) / 0.5 : 0; },
+    pj: [[choferE, (u, d, P) => ({ cara: u > P.w(12) ? 'sorpresa' : 'normal', brazos: u > P.w(12) ? [150, 150] : [15, 15], codos: [10, 10],
+                                  salto: u > P.w(12) ? 25 * Math.max(0, Math.sin(cl((u - P.w(12)) / 0.4) * Math.PI)) : 0 })]],
+    over: (ctx, u, d, P) => K.letrero(ctx, '¡PUM!', 0.5, 0.24, (u - P.w(12)) / 0.3, { tam: 220, giro: 0.12 }),
+  },
+  { // 11. La solución parece una locura: romper el concreto a propósito.
+    amb: ['dia'],
+    tomas: [[0, u => ({ pos: [XL - 2, 4.2, 13 - u * 0.5], mira: [XL - 2.6, 4.3, 0], fov: 44 })],
+            [(d) => d * 0.5, u => ({ pos: [XL + 5, 3.7, 10 - u * 0.4], mira: [XL + 3.3, 3.9, 0], fov: 42 })]],
+    act: (u, d) => { const k = cl((u - 0.15) / 0.35); focoL.visible = k > 0;
+      focoL.scale.setScalar(Math.max(0.01, K.rebote(k))); focoL.position.set(XL - 3, 5.5 + Math.sin(T * 4) * 0.1, 1); },
+    fin: () => { focoL.visible = false; },
+    pj: [[ingL, () => ({ cara: 'feliz', brazos: [15, 160], codos: [10, 10] })],
+         [jefeL, (u, d) => ({ cara: u / d > 0.5 ? 'sorpresa' : 'normal', brazos: u / d > 0.5 ? [150, 150] : [15, 15], codos: [10, 10],
+                              salto: u / d > 0.5 ? 28 * Math.max(0, Math.sin(cl((u / d - 0.5) / 0.15) * Math.PI)) : 0 })]],
+    over: (ctx, u, d) => K.letrero(ctx, '¿¡QUÉ!?', 0.62, 0.22, (u - d * 0.55) / 0.3, { tam: 170, color: '#ff5050', giro: 0.12 }),
+  },
+  { // 12. Pocas horas después de echarlo, cortan ranuras cada cuatro o cinco metros.
+    amb: ['dia'],
+    tomas: [[0, u => ({ pos: [sierra.position.x - 2, 5.5, 14], mira: [sierra.position.x + 1.5, 1.2, 0], fov: 46 })],
+            [(d) => d * 0.55, u => ({ pos: [XF + 9, 13 + u * 0.5, 13], mira: [XF, 0, 0.5], fov: 46 })]],
+    act: (u, d) => { const k = K.suave((u / d - 0.05) / 0.8);
+      const x = XF - 6 + 12 * k; sierra.position.set(x, 0, 0); disco.rotation.y = T * 25;
+      ranuraF.scale.x = Math.max(0.01, 12 * k); ranuraF.position.x = XF - 6 + 6 * k;
+      obreroF.malla.position.x = x - 1.2; grupoPolvo.position.x = x; polvoSierra((T * 2.5) % 1); },
+    pj: [[obreroF, () => ({ cara: 'feliz', brazos: [70, 70], codos: [20, 20], camina: true })]],
+    over: (ctx, u, d) => { if (u > d * 0.55) K.letrero(ctx, '4-5 M', 0.5, 0.24, (u - d * 0.6) / 0.3, { tam: 170, color: '#ffffff', giro: 0 }); },
+  },
+  { // 13. Así, la grieta aparece justo ahí, derechita y escondida.
+    amb: ['dia'],
+    tomas: [[0, u => ({ pos: [XG + 0.5, 3.8, 14 - u * 0.9], mira: [XG, 3.0, 0], fov: 46 })]],
+    act: (u, d) => { const p = cl(u / d); grietaG((p - 0.1) / 0.4); const roto = p > 0.55;
+      losaG.visible = !roto; mitadesG.forEach((m, i) => { m.visible = roto; m.position.x = XG + (i ? 1 : -1) * (3 + 0.12 * K.frena((p - 0.55) / 0.2)); });
+      sello.visible = p > 0.78; },
+    over: (ctx, u, d) => { const p = u / d; K.letrero(ctx, 'CORTE', 0.5, 0.2, p / 0.15, { tam: 140, color: '#ffffff', giro: 0 });
+      palomita(ctx, 0.78, 0.32, (p - 0.58) / 0.12, true); },
+  },
+  { // 14. Por eso, cuando manejas y escuchas ese tac... tac... tac...
+    amb: ['dia'],
+    tomas: [[0, u => { const z = autoA.position.z; return { pos: [-0.6, 2.6, z + 9.5], mira: [-2.2, 1.4, z - 12], fov: 50 }; }],
+            [(d, P) => P.w(7) - 0.1, u => { const z = autoA.position.z; return { pos: [4.5, 0.8, z - 4], mira: [-2.2, 0.8, z + 2], fov: 50 }; }]],
+    act: (u, d, P) => { let b = 0; [7, 8, 9].forEach(k => { const t0 = P.w(k); if (u >= t0) b = 0.25 * Math.exp(-(u - t0) * 12); });
+      autoA.position.set(-2.2, 0.3 + b, 50 - 13 * u); },
+    over: (ctx, u, d, P) => [7, 8, 9].forEach((k, i) =>
+      K.letrero(ctx, 'TAC', 0.25 + i * 0.25, 0.2 + (i % 2) * 0.06, (u - P.w(k)) / 0.3, { tam: 160, giro: -0.15 + i * 0.15 })),
+  },
+  { // 15. son las grietas que los ingenieros planearon desde el principio.
+    amb: ['dia'],
+    tomas: [[0, u => ({ pos: [10, 3.6, 4.5 - u * 0.5], mira: [10.2, 3.2, -9], fov: 46 })],
+            [(d) => d * 0.55, (u, d) => { const k = K.suave(u / (d * 0.45));
+               return { pos: lerp([10, 3.6, 3], [-22, 34, 42], k), mira: lerp([10.2, 3.2, -9], [4, 0, -45], k), fov: 46 }; }]],
+    act: () => { autoA.position.set(-2.2, 0.3, -400); },
+    pj: [[obreroA, () => ({ cara: 'feliz', brazos: [150, 150], codos: [10, 10] })],
+         [jefeA, () => ({ cara: 'feliz', brazos: [15, 150], codos: [10, 25] })],
+         [ingA, () => ({ cara: 'feliz', brazos: [150, 150], codos: [10, 10] })]],
+  },
+];
+
+
+// ============================================================ cada cuadro
+let T = 0;
+const P_DE = n => ({ w: k => datos.frases[n].palabras[k] });
+
+window.cuadro = (t) => {
+  T = t;
+  let n = 0;
+  while (n + 1 < datos.frases.length && t >= datos.frases[n + 1].ini) n++;
+  temblor = 0;
+  // aplicar en orden lo de las frases pasadas (en su estado final) y la actual
+  for (let i = 0; i <= n; i++) {
+    const F = FRASES[i], ini = datos.frases[i].ini, dur = datos.frases[i].fin - ini;
+    const u = i < n ? dur : t - ini;
+    if (F.act) F.act(u, dur, P_DE(i));
+    if (i < n && F.fin) F.fin();
+  }
+  const F = FRASES[n], ini = datos.frases[n].ini, dur = datos.frases[n].fin - ini, u = t - ini, P = P_DE(n);
+  // ambiente
+  const [a, b, fk] = F.amb;
+  const kAmb = fk ? fk(u, dur) : 0;
+  K.ambiente(mundo, a, b || a, kAmb);
+  solG.visible = !((b || a) === 'noche' && kAmb > 0.5) && a !== 'noche';
+  // toma actual
+  let ti = 0;
+  const inicioToma = j => (typeof F.tomas[j][0] === 'function' ? F.tomas[j][0](dur, P) : F.tomas[j][0]);
+  while (ti + 1 < F.tomas.length && u >= inicioToma(ti + 1)) ti++;
+  const ut = u - inicioToma(ti);
+  const tm = F.tomas[ti][1](ut, dur, P);
+  const pos = tm.pos.toArray ? tm.pos.toArray() : tm.pos;
+  const sacude = temblor * 0.35;
+  camara.position.set(pos[0] + Math.sin(t * 91) * sacude, pos[1] + Math.sin(t * 77) * sacude, pos[2]);
+  camara.lookAt(...tm.mira);
+  const golpe = 1 - K.frena(ut / 0.25);
+  camara.fov = tm.fov * (1 + 0.08 * golpe);
+  camara.updateProjectionMatrix();
+  // sombras alrededor de donde mira la cámara
+  luz.target.position.set(tm.mira[0], 0, tm.mira[2]);
+  luz.position.copy(luz.target.position).add(luz.userData.offset);
+  luz.target.updateMatrixWorld();
+  // personajes de esta frase
+  (F.pj || []).forEach(([pj, est]) => pj.actualizar(t, camara, est(u, dur, P)));
+  // dibujar
+  r.efecto.render(escena, camara);
+  r.ctx.drawImage(r.gl.domElement, 0, 0);
+  if (F.over) F.over(r.ctx, u, dur, P);
+  K.subtitulos(r.ctx, datos.subs, t);
+  return r.salida.toDataURL('image/jpeg', 0.9);
+};
+
+window.listo = K.cargarFuente();
+</script>
+</body>
+</html>
