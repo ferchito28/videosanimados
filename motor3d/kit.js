@@ -230,7 +230,7 @@ export async function cargarFuente() {
 }
 
 // subs: [[t, 'TEXTO', amarillo?], ...]
-export function subtitulos(ctx, subs, t, y = 0.6 * ALTO) {
+export function subtitulos(ctx, subs, t, y = 0.72 * ALTO) {
   let actual = null;
   for (const s of subs) { if (s[0] <= t) actual = s; else break; }
   if (!actual || actual[1] === '') return;

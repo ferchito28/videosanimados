@@ -57,7 +57,7 @@ problema, solución rara, dato final que sorprende). Ejemplo: `escenas/juntas_co
 
 Personajes 2D de cabeza blanca (diseño propio: obrero, jefe, ingeniero, chofer)
 dentro de escenarios 3D estilo caricatura, cortes cada 1-2 s, subtítulos de 1-2
-palabras al 60% de la altura. Inspirado en canales tipo "AI with CB", pero **no
+palabras al 72% de la altura (el usuario los pidió más abajo). Inspirado en canales tipo "AI with CB", pero **no
 copies sus personajes ni sus guiones**.
 
 ```bash
@@ -81,6 +81,12 @@ python generar3d.py juntas_concreto --voz ... --cuadros 2,10.5  # revisar cuadro
   edificios, objetos y vida: gaviotas (`K.gaviotas`), humo (`K.humo`), maletas,
   faroles, banderitas, letreros (`K.cartel`, crearlos después de `cargarFuente`),
   cajas, vehículos, espuma, etc. Referencia de lo que le gustó: `motor3d/escenas/titanic.html`.
+- **Estilo realista (el preferido ahora):** usar `motor3d/realista.js`
+  (`crearRenderRealista`, `convertir(escena)`, `texturas.*` con `vestir`, `neblina`,
+  `particulas`, `enfocar`, luces `PointLight` cálidas en faroles/velas). Sin contornos
+  en el escenario; los personajes 2D sí llevan contorno. Referencia: `motor3d/escenas/sueno.html`.
+- Personajes en cama: usar `PersonajeCama` (trae almohada y cobija; `inclina` 0 = acostado,
+  1 = sentado). Nunca meter un `Personaje2D` de pie dentro de una cama.
 - Tragedias reales: el humor va en el narrador, nunca en las víctimas; no mostrar
   gente muriendo.
 - Un video de 60 s tarda ~12-15 min. Revisa primero con `--cuadros`.
