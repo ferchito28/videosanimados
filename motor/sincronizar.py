@@ -125,6 +125,19 @@ def desde_audio(palabras, ruta):
     largos = [g for g in gaps if g[1] - g[0] >= umbral]
     pares = _emparejar([(i, esperado(i, 0, ini, len(palabras) - 1, fin), 1.0) for i in fuertes], largos,
                         pen_pausa=2.5, pen_silencio=4.0)
+    # 1b) un final de oración casi siempre es la pausa más larga de su zona: si junto a la
+    #     pausa elegida hay otra libre más larga (p. ej. el narrador también se detuvo en una
+    #     coma o en dos puntos), se queda con la más larga.
+    orden = sorted(pares)
+    for j, i in enumerate(orden):
+        if palabras[i].endswith("..."):
+            continue
+        ant = pares[orden[j - 1]][1] if j > 0 else ini
+        sig = pares[orden[j + 1]][0] if j + 1 < len(orden) else fin
+        usados_ = set(pares.values())
+        cand = [g for g in largos if g == pares[i] or (g not in usados_ and ant <= g[0] and g[1] <= sig)]
+        exp = esperado(i, 0, ini, len(palabras) - 1, fin)
+        pares[i] = max(cand, key=lambda g: (g[1] - g[0]) - 0.05 * abs((g[0] + g[1]) / 2 - exp))
     # 2) comas dentro de cada tramo ↔ los silencios que quedan en ese tramo
     anclas = [(-1, ini)] + [(i, pares[i][1]) for i in sorted(pares)] + [(len(palabras) - 1, fin)]
     usados = set(pares.values())
