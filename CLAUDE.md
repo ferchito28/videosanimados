@@ -85,6 +85,9 @@ python generar3d.py juntas_concreto --voz ... --cuadros 2,10.5  # revisar cuadro
   (`crearRenderRealista`, `convertir(escena)`, `texturas.*` con `vestir`, `neblina`,
   `particulas`, `enfocar`, luces `PointLight` cálidas en faroles/velas). Sin contornos
   en el escenario; los personajes 2D sí llevan contorno. Referencia: `motor3d/escenas/sueno.html`.
+- **Imagen nítida y con color vivo** (el usuario se quejó de video "desenfocado y opaco"):
+  desenfoque suave (`enfocar(r, d, 1)` máximo; no subirlo), bloom bajo, neblina ligera
+  (densidad ≤ 0.001 de día). `render.js` ya aplica nitidez + contraste + saturación.
 - Personajes en cama: usar `PersonajeCama` (trae almohada y cobija; `inclina` 0 = acostado,
   1 = sentado). Nunca meter un `Personaje2D` de pie dentro de una cama.
 - Tragedias reales: el humor va en el narrador, nunca en las víctimas; no mostrar
