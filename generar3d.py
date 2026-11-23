@@ -46,6 +46,25 @@ def datos_de(esc):
             "subs": [[t, txt, am] for t, txt, am in esc.subs]}
 
 
+def con_pausas(esc, voz, pausas, salida):
+    """Copia la voz metiendo silencio justo antes de la frase n+1 (pausas = {n: segundos})."""
+    os.makedirs(os.path.dirname(salida), exist_ok=True)
+    cortes = sorted((float(esc.tramos[n + 1][0]) + 0.02, seg) for n, seg in pausas.items() if n + 1 < len(esc.tramos))
+    partes, filtros, ant = [], [], 0.0
+    for i, (t, seg) in enumerate(cortes):
+        filtros.append(f"[0:a]atrim={ant:.3f}:{t:.3f},asetpts=PTS-STARTPTS[p{i}]")
+        filtros.append(f"aevalsrc=0:d={seg:.3f}:s=44100:c=mono,aformat=channel_layouts=mono[s{i}]")
+        partes += [f"[p{i}]", f"[s{i}]"]
+        ant = t
+    filtros.append(f"[0:a]atrim=start={ant:.3f},asetpts=PTS-STARTPTS[pf]")
+    partes.append("[pf]")
+    filtros.append("".join(partes) + f"concat=n={len(partes)}:v=0:a=1[a]")
+    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", voz, "-filter_complex",
+                    ";".join(filtros),
+                    "-map", "[a]", "-ac", "1", "-ar", "44100", salida], check=True)
+    return salida
+
+
 def main():
     ap = argparse.ArgumentParser(description="Videos explicativos en 3D")
     ap.add_argument("video", choices=list(VIDEOS))
@@ -58,6 +77,10 @@ def main():
 
     clase, pagina = VIDEOS[a.video]
     esc = clase(voz=os.path.abspath(a.voz)) if a.voz else clase()
+    if a.voz and getattr(clase, "pausas", None):
+        # respiro extra después de las frases importantes: se mete silencio en la voz
+        a.voz = con_pausas(esc, a.voz, clase.pausas, os.path.join(a.salida, "voces", f"{a.video}_pausas.wav"))
+        esc = clase(voz=os.path.abspath(a.voz))
     os.makedirs(os.path.join(RAIZ, "motor3d", "tmp"), exist_ok=True)
     ruta_json = os.path.join("motor3d", "tmp", f"{a.video}.json")
     with open(os.path.join(RAIZ, ruta_json), "w") as f:

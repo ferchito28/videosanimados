@@ -15,6 +15,8 @@ class Puentes(Explicador):
     titulo = "¿Por qué los puentes están sobre rodillos?"
     duracion = 60.0
     una_palabra = True
+    # segundos de silencio extra después de estas frases (para que se alcancen a ver las escenas)
+    pausas = {0: 0.4, 3: 0.4, 4: 0.8, 6: 0.9, 7: 0.4, 8: 0.6, 9: 0.9, 10: 0.7, 11: 0.6}
     frases = [
         Frase("¿Por qué algunos puentes de acero están parados sobre rodillos?", "rodillos", _nada,
               [("palabra:9", "pop")]),

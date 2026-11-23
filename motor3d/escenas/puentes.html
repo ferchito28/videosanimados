@@ -147,6 +147,23 @@ function moverPuente(d) { dPuente = d; puente.scale.x = 1 + d / L; }
 
 // apoyos (estribos) en las dos orillas
 [-1, 1].forEach(l => caja(7, 6, 16, CONCRETO, l * 37.5, -6, 0));
+// --- cadenas y candados de caricatura para "bien amarrado"
+const amarres = new THREE.Group(); amarres.visible = false; escena.add(amarres);
+const ORO = K.toon(0xffc61a, { emissive: 0x6a4a00 });
+[-1, 1].forEach(l => {
+  cil(0.55, 0.65, 2.4, ORO, l * 46, 1.2, 8.6, amarres, 14);
+  const A = new THREE.Vector3(l * 39.6, 1.4, 6.7), B = new THREE.Vector3(l * 46, 2.0, 8.6);
+  const n = 9;
+  for (let i = 0; i <= n; i++) {
+    const p = A.clone().lerp(B, i / n); p.y -= Math.sin(i / n * Math.PI) * 0.6;
+    const eslabon = K.malla(new THREE.TorusGeometry(0.32, 0.1, 8, 14), ORO, p.x, p.y, p.z);
+    eslabon.lookAt(B); if (i % 2) eslabon.rotateZ(Math.PI / 2); amarres.add(eslabon);
+  }
+  const c = A.clone().lerp(B, 0.5);
+  caja(1.3, 1.1, 0.5, ORO, c.x, c.y - 1.2, c.z + 0.3, amarres);
+  const arco = K.malla(new THREE.TorusGeometry(0.42, 0.12, 8, 16, Math.PI), K.toon(0xb8bcc6), c.x, c.y - 0.65, c.z + 0.3); amarres.add(arco);
+  caja(0.18, 0.35, 0.1, K.toon(0x1a1a1c), c.x, c.y - 1.25, c.z + 0.57, amarres);
+});
 // --- extremo FIJO (x = -40): apoyo de pasador con pernos de anclaje
 const fijos = [];
 [-1, 1].forEach(s => {
@@ -180,23 +197,25 @@ function ponerRodillos(d) {
 }
 // --- junta de peines en la orilla derecha (x = 40 a 42)
 const pFijo = new THREE.Group(), pMovil = new THREE.Group(); escena.add(pFijo, pMovil);
-const PEINE = K.toon(0x7d848e);
+const PEINE = K.toon(0x7d848e), DIENTE = K.toon(0x7d848e);
 caja(1.3, 0.12, 9, PEINE, 42.55, 0.08, 0, pFijo);
 caja(1.2, 0.12, 9, PEINE, 39.4, 0.08, 0, pMovil);
 caja(1.0, 1.2, 9, K.toon(0x1a1a1c), 40.5, -0.65, 0);             // el hueco oscuro debajo de la junta
 for (let k = 0; k < 22; k++) {
   const z = -4.3 + k * 0.41;
-  if (k % 2 === 0) caja(2.3, 0.1, 0.22, PEINE, 41.9 - 1.15, 0.09, z, pFijo);
-  else caja(1.6, 0.1, 0.22, PEINE, 40.0 + 0.8, 0.09, z, pMovil);
+  if (k % 2 === 0) caja(2.3, 0.1, 0.22, DIENTE, 41.9 - 1.15, 0.09, z, pFijo);
+  else caja(1.6, 0.1, 0.22, DIENTE, 40.0 + 0.8, 0.09, z, pMovil);
 }
-function ponerJunta(d) { pMovil.position.x = d; }
+const regla = caja(1, 0.12, 0.35, K.toon(0xffd600, { emissive: 0x6a5a00 }), 40.5, 1.55, 6.55); regla.visible = false;
+function ponerJunta(d) { pMovil.position.x = d; regla.scale.x = Math.max(0.05, 1 - d); regla.position.x = 40 + d + (1 - d) / 2; }
 // termómetros de la calle (carteles)
 const termos = {};
-const posteTermo = cil(0.15, 0.15, 7, K.toon(0x2a2a2e), 45, 3.5, -8.5);
-termos.frio = K.cartel(escena, '-5 °C', 45, 6.6, -8.4, 4.2, 2.0, '#2d6fd6');
-termos.calor = K.cartel(escena, '35 °C', 45, 6.6, -8.4, 4.2, 2.0, '#d9302c');
-termos.normal = K.cartel(escena, '18 °C', 45, 6.6, -8.4, 4.2, 2.0, '#3c8f4a');
-function termo(cual) { Object.entries(termos).forEach(([k, m]) => (m.visible = k === cual)); }
+const posteTermo = cil(0.12, 0.12, 4.4, K.toon(0x2a2a2e), 43.4, 2.2, 9.6);
+termos.frio = K.cartel(escena, '-5 °C', 43.4, 4.9, 9.7, 3.0, 1.5, '#2d6fd6');
+termos.calor = K.cartel(escena, '35 °C', 43.4, 4.9, 9.7, 3.0, 1.5, '#d9302c');
+termos.normal = K.cartel(escena, '18 °C', 43.4, 4.9, 9.7, 3.0, 1.5, '#3c8f4a');
+function termo(cual) { Object.values(termos).forEach(m => (m.visible = false)); }
+posteTermo.visible = false;
 // flechas que muestran hacia dónde rueda
 const flechaAfuera = K.flecha3d(0xff5a2a); flechaAfuera.rotation.z = -Math.PI / 2; flechaAfuera.scale.setScalar(0.55); escena.add(flechaAfuera);
 const flechaRegreso = K.flecha3d(0x6fb6ff); flechaRegreso.rotation.z = Math.PI / 2; flechaRegreso.scale.setScalar(0.55); escena.add(flechaRegreso);
@@ -261,6 +280,7 @@ const jefe = new Personaje2D('jefe', 4.0).agregar(escena, -12, 5.3, 0.3);
 const ing = new Personaje2D('ingeniero', 3.8).agregar(escena, -16.5, 5.3, 0.3);
 const fotos = [['pasajera', -24], ['pasajero', -27.5], ['medico', 10]].map(([tp, x]) => new Personaje2D(tp, 3.5, 0.4).agregar(escena, x, 5.3, 0.3));
 const inspector = new Personaje2D('obrero', 2.6).agregar(escena, 36.2, 7.4, -3);
+const inspector2 = new Personaje2D('ingeniero', 2.6).agregar(escena, -36.2, 7.4, -3);
 
 // ====================================================================== LABORATORIO AL AIRE LIBRE (x = 1000)
 const XD = 1000;
@@ -270,13 +290,13 @@ for (let i = 0; i < 14; i++) edificio(XD - 90 + i * 14, -60 - (i % 3) * 16, 11, 
 for (let x = XD - 60; x <= XD + 60; x += 12) arbol(x, -32, 1.1);
 // dos bloques de concreto con pivote en la orilla de afuera (para que se puedan voltear)
 const bloques = [-1, 1].map(l => {
-  const g = new THREE.Group(); g.position.set(XD + l * 10, 0, 0); escena.add(g);
-  caja(4, 5, 6, CONCRETO, -l * 2, 2.5, 0, g);
-  [-1.5, 1.5].forEach(z => caja(0.3, 1.4, 1.4, ANCLA, -l * 4.1, 3.6, z, g));   // placas de anclaje en la cara de adentro
+  const g = new THREE.Group(); g.position.set(XD + l * 9, 0, 0); escena.add(g);
+  caja(3, 5, 6, CONCRETO, -l * 1.5, 2.5, 0, g);
+  [-1.5, 1.5].forEach(z => caja(0.3, 1.4, 1.4, ANCLA, -l * 3.1, 3.6, z, g));   // placas de anclaje en la cara de adentro
   return g;
 });
 const grietasB = [-1, 1].map((l, i) => {
-  const pts = K.camino([-l * 3.6, 4.9, 3.06], [-l * 1.2, 0.3, 3.06], 8, 0.4, 40 + i, 'x');
+  const pts = K.camino([-l * 2.6, 4.9, 3.06], [-l * 0.9, 0.3, 3.06], 8, 0.3, 40 + i, 'x');
   return K.grieta(bloques[i], pts, 0.22, 0.12);
 });
 const NSEG = 20, XV0 = XD - 6, LV = 12;
@@ -296,9 +316,10 @@ for (let x = XD - 22; x <= XD + 22; x += 4) cil(0.1, 0.1, 2.2, K.toon(0x2a2a2e),
 caja(46, 0.25, 0.06, K.toon(0xffd600), XD, 1.9, -10);
 const publico = [];
 for (let i = 0; i < 14; i++) publico.push(new Personaje2D(TIPOS[(i * 5) % TIPOS.length], 3.7, 0.4).agregar(escena, XD - 21 + i * 3.2 + (i % 2) * 0.6, -12.5 - (i % 3) * 1.4, 0));
-const ingD = new Personaje2D('ingeniero', 4.2).agregar(escena, XD - 4.5, 9.5);
-const jefeD = new Personaje2D('jefe', 4.4).agregar(escena, XD + 3.8, 9.8);
-const obreroD = new Personaje2D('obrero', 4.0).agregar(escena, XD + 9, 7.5);
+const ingD = new Personaje2D('ingeniero', 4.2).agregar(escena, XD - 7.5, 6);
+const jefeD = new Personaje2D('jefe', 4.4).agregar(escena, XD - 3.5, 8);
+const obreroD = new Personaje2D('obrero', 4.0).agregar(escena, XD + 7.5, 6);
+function ponerLab(junto) { ingD.malla.position.set(junto ? XD - 2.2 : XD - 7.5, 0, junto ? 9 : 6); jefeD.malla.position.set(junto ? XD + 2.2 : XD - 3.5, 0, junto ? 9.3 : 8); }
 [[XD - 26, 2], [XD + 26, 3], [XD - 24, 7], [XD + 23, 8]].forEach(([x, z]) => K.valla(escena, x, z, 0));
 const focoD = K.foco(); focoD.visible = false; escena.add(focoD);
 
@@ -330,8 +351,8 @@ for (let i = 0; i < 8; i++) gentePaso.push(new Personaje2D(TIPOS[(i * 3 + 2) % T
 
 // ====================================================================== atmósfera
 R.convertir(escena);
-R.neblina(escena, 0xbfd8ef, 0.004);
-const NIEBLA = { dia: [0xbfd8ef, 0.0035], calor: [0xffc79a, 0.0045], invierno: [0xdfe8f2, 0.008] };
+R.neblina(escena, 0xbfd8ef, 0.0016);
+const NIEBLA = { dia: [0xbfd8ef, 0.0016], calor: [0xffd2a8, 0.0019], invierno: [0xdfe8f2, 0.004] };
 const nieve = R.particulas(escena, 600, 0xffffff, 0.16);
 let temblor = 0, destello = 0, T = 0;
 function atmosfera(amb, ambB, k, t, tm) {
@@ -358,8 +379,9 @@ function palomita(ctx, x, y, prog, ok = true) {
   else { ctx.moveTo(X - k * 0.4, Y - k * 0.4); ctx.lineTo(X + k * 0.4, Y + k * 0.4); ctx.moveTo(X - k * 0.4, Y + k * 0.4); ctx.lineTo(X + k * 0.4, Y - k * 0.4); }
   ctx.stroke(); ctx.restore();
 }
-const tomaRodillos = (u, k = 0) => ({ pos: [36.6 + u * 0.15, -2.1 + k, 12.5 - u * 0.25], mira: [39.2, -2.3, 5], fov: 40 });
-const tomaJunta = u => ({ pos: [44.6 - u * 0.15, 5.2, 7.2], mira: [40.6, 0, 1.2], fov: 44 });
+const tomaApoyo = (lado, u, z = 16.5) => ({ pos: [lado * 34.2, 0.2, z - u * 0.3], mira: [lado * 39.0, -1.8, 4.5], fov: 50 });
+const tomaRodillos = u => tomaApoyo(1, u);
+const tomaJunta = u => tomaApoyo(1, u, 17);
 
 const FRASES = [
   { // 0. ¿Por qué algunos puentes de acero están parados sobre rodillos?
@@ -372,11 +394,10 @@ const FRASES = [
   { // 1. Imagina un puente de acero de doscientos metros, bien amarrado a la tierra en los dos extremos.
     amb: 'dia',
     tomas: [[0, u => ({ pos: [-4 + u * 1.2, 4, 118 - u * 3], mira: [0, 3, 0], fov: 46 })],
-            [(d, P) => W(P, 9) - 0.1, u => ({ pos: [-36.4 - u * 0.15, -2.0, 12.5 - u * 0.25], mira: [-39, -2.3, 5], fov: 40 })],
-            [(d, P) => W(P, 15) - 0.1, u => tomaRodillos(u)]],
-    act: (u, d, P) => { moverPuente(0); ponerRodillos(0);
-      const k = cl((u - W(P, 9)) / 0.3) * pulso(); brillar(ANCLA, k, 0x55555c); },
-    fin: () => brillar(ANCLA, 0, 0x55555c),
+            [(d, P) => W(P, 8) - 0.1, u => ({ pos: [-31 - u * 0.3, 4.5, 23 - u * 0.5], mira: [-42.5, 0.6, 7], fov: 50 })],
+            [(d, P) => W(P, 13) - 0.1, u => ({ pos: [31 + u * 0.3, 4.5, 23 - u * 0.5], mira: [42.5, 0.6, 7], fov: 50 })]],
+    act: (u, d, P) => { moverPuente(0); ponerRodillos(0); ponerJunta(0); amarres.visible = u > W(P, 8) - 0.1; },
+    fin: () => { amarres.visible = false; },
     over: (ctx, u, d, P) => { if (u < W(P, 9)) K.letrero(ctx, '200 M', 0.5, 0.17, (u - W(P, 6)) / 0.3, { tam: 200, color: '#ffffff', giro: 0 });
       else K.letrero(ctx, 'AMARRADO', 0.5, 0.17, (u - W(P, 9)) / 0.3, { tam: 170 }); },
   },
@@ -398,29 +419,30 @@ const FRASES = [
   },
   { // 4. Entre una mañana de invierno y una tarde de verano, ese puente puede estirarse casi diez centímetros.
     amb: 'invierno', ambB: 'calor', k: (u, d, P) => (u >= W(P, 6) - 0.1 ? 1 : 0),
-    tomas: [[0, u => tomaJunta(u)], [(d, P) => W(P, 6) - 0.1, u => tomaJunta(u)]],
-    act: (u, d, P) => { const t0 = W(P, 6) - 0.1, verano = u >= t0;
-      moverPuente(verano ? -0.45 + 0.9 * K.frena((u - t0) / 1.2) : -0.45); ponerRodillos(dPuente); ponerJunta(dPuente); termo(verano ? 'calor' : 'frio'); },
+    tomas: [[0, u => tomaJunta(u)]],
+    act: (u, d, P) => { const t0 = W(P, 6) - 0.1, verano = u >= t0; regla.visible = true;
+      moverPuente(verano ? -0.5 + 1.0 * K.suave((u - t0) / 2.2) : -0.5); ponerRodillos(dPuente); ponerJunta(dPuente); termo(verano ? 'calor' : 'frio'); },
+    fin: () => { regla.visible = false; },
     over: (ctx, u, d, P) => { if (u < W(P, 6) - 0.1) K.letrero(ctx, 'INVIERNO', 0.5, 0.17, (u - W(P, 3)) / 0.3, { tam: 170, color: '#9fdcff', giro: 0 });
       else if (u < W(P, 14)) K.letrero(ctx, 'VERANO', 0.5, 0.17, (u - W(P, 7)) / 0.3, { tam: 170, color: '#ff8a3a', giro: 0 });
       else K.letrero(ctx, '+10 CM', 0.5, 0.17, (u - W(P, 15)) / 0.3, { tam: 220 }); },
   },
   { // 5. Y si está amarrado de los dos lados, no tiene para dónde crecer.
     amb: 'calor',
-    tomas: [[0, u => ({ pos: [XD + 1, 7, 46 - u * 1.2], mira: [XD, 3, 0], fov: 46 })],
-            [(d, P) => W(P, 9) - 0.1, u => ({ pos: [XD - 6.5, 5.2, 18 - u * 0.4], mira: [XD - 4.5, 3.8, 9.5], fov: 44 })]],
-    act: (u, d, P) => { ponerViga(0); bloques.forEach(b => (b.rotation.z = 0)); grietasB.forEach(g => g(0));
+    tomas: [[0, u => ({ pos: [XD + 15 - u * 0.3, 6.5, 19 - u * 0.4], mira: [XD, 3, 0], fov: 50 })],
+            [(d, P) => W(P, 9) - 0.1, u => ({ pos: [XD - 4.2, 4.4, 15.5 - u * 0.3], mira: [XD - 7.5, 3.6, 6], fov: 46 })]],
+    act: (u, d, P) => { ponerViga(0); ponerLab(false); bloques.forEach(b => (b.rotation.z = 0)); grietasB.forEach(g => g(0));
       brillar(ANCLA, cl((u - W(P, 3)) / 0.3) * pulso(), 0x55555c);
-      flechasD.forEach((f, i) => { const l = i ? 1 : -1; f.visible = true; f.position.set(XD + l * (3.4 + Math.sin(T * 9) * 0.3), 3.6, 1.2); }); },
+      flechasD.forEach((f, i) => { const l = i ? 1 : -1; f.visible = true; f.position.set(XD + l * (3.6 + Math.sin(T * 9) * 0.3), 5.2, 0); }); },
     fin: () => brillar(ANCLA, 0, 0x55555c),
     pj: [[ingD, (u, d, P) => ({ cara: u > W(P, 9) ? 'preocupado' : 'normal', brazos: [15, 80], codos: [10, 10], habla: u > W(P, 9) })],
          [jefeD, () => ({ cara: 'normal', brazos: [60, 60], codos: [100, 100] })]],
   },
   { // 6. Así que empuja... y empuja... hasta que se tuerce o revienta sus apoyos.
     amb: 'calor',
-    tomas: [[0, u => ({ pos: [XD, 5.5, 34 - u * 1.0], mira: [XD, 3.2, 0], fov: 46 })],
-            [(d, P) => W(P, 10) - 0.08, u => ({ pos: [XD + 2, 7, 44 + u * 1.2], mira: [XD, 3, 0], fov: 48 })]],
-    act: (u, d, P) => { const t1 = W(P, 8), t2 = W(P, 10);
+    tomas: [[0, u => ({ pos: [XD + 14 - u * 0.3, 6, 18 - u * 0.4], mira: [XD, 3.4, 0], fov: 50 })],
+            [(d, P) => W(P, 10) - 0.08, u => ({ pos: [XD + 17, 8, 23 + u * 0.8], mira: [XD, 3, 0], fov: 50 })]],
+    act: (u, d, P) => { const t1 = W(P, 8), t2 = W(P, 10); ponerLab(false);
       const b = u < t1 ? 0.15 * Math.max(0, Math.sin(cl((u - W(P, 2)) / 0.5) * Math.PI)) + 0.15 * Math.max(0, Math.sin(cl((u - W(P, 4)) / 0.5) * Math.PI))
                        : 1.7 * K.rebote(cl((u - t1) / 0.5));
       ponerViga(b);
@@ -436,11 +458,11 @@ const FRASES = [
   },
   { // 7. La solución parece trampa: dejar un lado suelto.
     amb: 'dia',
-    tomas: [[0, u => ({ pos: [XD - 0.5, 4.6, 21.5 - u * 0.5], mira: [XD - 0.5, 3.8, 9.5], fov: 46 })]],
-    act: (u, d, P) => { ponerViga(1.7); bloques.forEach((bl, i) => (bl.rotation.z = (i ? -1 : 1) * 0.16)); grietasB.forEach(g => g(1));
+    tomas: [[0, u => ({ pos: [XD, 4.6, 23 - u * 0.4], mira: [XD, 3.6, 9], fov: 48 })]],
+    act: (u, d, P) => { ponerViga(1.7); ponerLab(true); bloques.forEach((bl, i) => (bl.rotation.z = (i ? -1 : 1) * 0.16)); grietasB.forEach(g => g(1));
       const k = cl((u - 0.1) / 0.35); focoD.visible = k > 0; focoD.scale.setScalar(Math.max(0.01, K.rebote(k)) * 0.9);
-      focoD.position.set(XD - 4.5, 6.2 + Math.sin(T * 4) * 0.1, 10); },
-    fin: () => { focoD.visible = false; },
+      focoD.position.set(XD - 2.2, 6.2 + Math.sin(T * 4) * 0.1, 9.4); },
+    fin: () => { focoD.visible = false; ponerLab(false); },
     pj: [[ingD, () => ({ cara: 'feliz', brazos: [15, 160], codos: [10, 10], habla: true })],
          [jefeD, (u, d, P) => ({ cara: u > W(P, 6) ? 'sorpresa' : 'normal', brazos: u > W(P, 6) ? [150, 150] : [15, 15], codos: [10, 10],
                                  salto: u > W(P, 6) ? 28 * Math.max(0, Math.sin(cl((u - W(P, 6)) / 0.35) * Math.PI)) : 0 })]],
@@ -449,46 +471,46 @@ const FRASES = [
   },
   { // 8. Un extremo se fija bien a la tierra, y el otro se apoya sobre rodillos de acero.
     amb: 'dia',
-    tomas: [[0, u => ({ pos: [-36.4 - u * 0.2, -2.0, 12.5 - u * 0.25], mira: [-39, -2.3, 5], fov: 40 })],
+    tomas: [[0, u => tomaApoyo(-1, u)],
             [(d, P) => W(P, 9) - 0.1, u => tomaRodillos(u)]],
     act: (u, d, P) => { moverPuente(0); ponerRodillos(0); ponerJunta(0); termo('normal');
       brillar(ANCLA, u < W(P, 9) ? cl((u - W(P, 3)) / 0.3) * pulso() : 0, 0x55555c);
       brillar(RODILLO, cl((u - W(P, 14)) / 0.3) * pulso(), 0x9aa3b0); },
     fin: () => { brillar(ANCLA, 0, 0x55555c); brillar(RODILLO, 0, 0x9aa3b0); },
-    pj: [[inspector, (u, d, P) => ({ cara: 'feliz', brazos: [15, 90], codos: [10, 0] })]],
+    pj: [[inspector, (u, d, P) => ({ cara: 'feliz', brazos: [15, 90], codos: [10, 0] })], [inspector2, () => ({ cara: 'feliz', brazos: [15, 150], codos: [10, 25] })]],
     over: (ctx, u, d, P) => { if (u < W(P, 9)) { K.letrero(ctx, 'FIJO', 0.5, 0.17, (u - W(P, 3)) / 0.3, { tam: 210, color: '#ffffff', giro: 0 }); }
       else K.letrero(ctx, 'RODILLOS', 0.5, 0.17, (u - W(P, 14)) / 0.3, { tam: 190 }); },
   },
   { // 9. Con el calor, el puente rueda hacia afuera. Con el frío, rueda de regreso.
     amb: 'calor', ambB: 'invierno', k: (u, d, P) => (u >= W(P, 8) - 0.1 ? 1 : 0),
-    tomas: [[0, u => tomaRodillos(u, 0.2)], [(d, P) => W(P, 8) - 0.1, u => tomaRodillos(u, 0.2)]],
-    act: (u, d, P) => { const t0 = W(P, 8) - 0.1;
-      const dd = u < t0 ? 0.9 * K.suave((u - W(P, 4)) / Math.max(0.6, t0 - W(P, 4) - 0.2)) : 0.9 - 1.3 * K.suave((u - W(P, 10)) / Math.max(0.6, d - W(P, 10) - 0.2));
+    tomas: [[0, u => tomaRodillos(u)]],
+    act: (u, d, P) => { const t0 = W(P, 8) - 0.1; regla.visible = true;
+      const dd = u < t0 ? 0.8 * K.suave((u - W(P, 3)) / Math.max(0.8, t0 - W(P, 3))) : 0.8 - 1.3 * K.suave((u - W(P, 9)) / Math.max(0.8, d - W(P, 9) - 0.3));
       moverPuente(dd); ponerRodillos(dd); ponerJunta(dd); termo(u < t0 ? 'calor' : 'frio');
       flechaAfuera.visible = u < t0 && u > W(P, 4); flechaRegreso.visible = u >= t0 && u > W(P, 10);
-      flechaAfuera.position.set(41.6 + Math.sin(T * 8) * 0.15, -2.4, 6.6); flechaRegreso.position.set(36.4 - Math.sin(T * 8) * 0.15, -2.4, 6.6); },
-    fin: () => { flechaAfuera.visible = flechaRegreso.visible = false; },
+      flechaAfuera.position.set(41.2 + Math.sin(T * 8) * 0.15, -2.45, 7.2); flechaRegreso.position.set(37.0 - Math.sin(T * 8) * 0.15, -2.45, 7.2); },
+    fin: () => { flechaAfuera.visible = flechaRegreso.visible = false; regla.visible = false; },
     pj: [[inspector, (u, d, P) => ({ cara: u < W(P, 8) ? 'calor' : 'frio', tiembla: u < W(P, 8) ? 0 : 0.8, brazos: [15, 90], codos: [10, 0] })]],
     over: (ctx, u, d, P) => { if (u < W(P, 8) - 0.1) K.letrero(ctx, 'CALOR', 0.5, 0.17, (u - W(P, 2)) / 0.3, { tam: 210, color: '#ff6a2a' });
       else K.letrero(ctx, 'FRÍO', 0.5, 0.17, (u - W(P, 10)) / 0.3, { tam: 210, color: '#9fdcff' }); },
   },
   { // 10. Y en la orilla ponen una junta con dientes, como dos peines, para que los autos pasen sin brincar.
     amb: 'dia',
-    tomas: [[0, u => ({ pos: [44.2 - u * 0.3, 4.6, 6.8], mira: [40.9, 0, 0.6], fov: 44 })],
+    tomas: [[0, u => ({ pos: [46.5 - u * 0.3, 4.2, 11.5 - u * 0.3], mira: [40.5, 0, 0.5], fov: 46 })],
             [(d, P) => W(P, 14) - 0.1, u => ({ pos: [47.5, 3.2, 14], mira: [40.6, 0.6, 2.3], fov: 48 })]],
-    act: (u, d, P) => { const dd = 0.28 * Math.sin(u * 2.2); moverPuente(dd); ponerRodillos(dd); ponerJunta(dd); termo('normal');
-      brillar(PEINE, cl((u - W(P, 6)) / 0.3) * pulso() * (u < W(P, 14) ? 1 : 0), 0x7d848e);
+    act: (u, d, P) => { const dd = 0.3 * Math.sin(u * 1.4); moverPuente(dd); ponerRodillos(dd); ponerJunta(dd); termo('normal');
+      brillar(DIENTE, cl((u - W(P, 6)) / 0.3) * pulso() * (u < W(P, 14) ? 1 : 0), 0x7d848e);
       const ta = W(P, 16); autoJunta.visible = u > W(P, 14) - 0.2;
       autoJunta.position.set(40.6 + (u - ta) * 9, 0.08, 2.3); },
-    fin: () => { autoJunta.visible = false; brillar(PEINE, 0, 0x7d848e); },
+    fin: () => { autoJunta.visible = false; brillar(DIENTE, 0, 0x7d848e); },
     over: (ctx, u, d, P) => { if (u < W(P, 14)) K.letrero(ctx, 'PEINES', 0.5, 0.17, (u - W(P, 11)) / 0.3, { tam: 210 });
       else palomita(ctx, 0.5, 0.2, (u - W(P, 18)) / 0.15); },
   },
   { // 11. Hoy muchos puentes usan almohadillas de hule gigantes en lugar de rodillos, pero la idea es la misma.
     amb: 'dia',
-    tomas: [[0, u => ({ pos: [XP + 4.8 - u * 0.25, 10.9, 8.2], mira: [XP, 10.7, 2.6], fov: 42 })],
+    tomas: [[0, u => ({ pos: [XP + 8 - u * 0.3, 10.8, 16 - u * 0.3], mira: [XP - 1, 11, 1.5], fov: 50 })],
             [(d, P) => W(P, 12) - 0.1, u => ({ pos: [XP + 26, 9, 46 - u], mira: [XP, 10, 0], fov: 46 })]],
-    act: (u) => { ponerHule(0.55 * Math.sin(u * 2.4)); },
+    act: (u) => { ponerHule(0.8 * Math.sin(u * 1.6)); },
     pj: [[obreroP, () => ({ cara: 'feliz', brazos: [15, 80], codos: [10, 10] })],
          [ingP, () => ({ cara: 'feliz', brazos: [15, 150], codos: [10, 25], habla: true })]],
     over: (ctx, u, d, P) => { if (u < W(P, 12)) K.letrero(ctx, 'HULE', 0.5, 0.17, (u - W(P, 4)) / 0.3, { tam: 230 });
@@ -497,7 +519,7 @@ const FRASES = [
   { // 12. Así que la próxima vez que cruces un puente... recuerda que se está moviendo debajo de ti.
     amb: 'dia', ambB: 'calor', k: (u, d, P) => K.suave((u - W(P, 9)) / 1.5) * 0.8,
     tomas: [[0, u => { const a = autos[0].position; return { pos: [a.x - 9, 3.2, 2.3], mira: [a.x + 12, 2.2, 2.3], fov: 56 }; }],
-            [(d, P) => W(P, 9) - 0.1, (u, d) => { const k = K.suave(u / 3); return { pos: lerp([30, 6, 34], [120, 58, 150], k), mira: lerp([0, 4, 0], [0, 6, -30], k), fov: 48 }; }]],
+            [(d, P) => W(P, 9) - 0.1, (u, d) => { const k = K.suave(u / 3); return { pos: lerp([30, 6, 34], [85, 40, 110], k), mira: lerp([0, 4, 0], [0, 4, -20], k), fov: 48 }; }]],
     act: (u, d, P) => { const dd = 0.25 * Math.sin(T * 1.6); moverPuente(dd); ponerRodillos(dd); ponerJunta(dd); termo('normal'); },
     pj: [[jefe, () => ({ cara: 'feliz', brazos: [150, 150], codos: [10, 10] })], [ing, () => ({ cara: 'feliz', brazos: [15, 150], codos: [10, 10] })]],
   },
@@ -518,6 +540,7 @@ function vida(n, u, dur, t) {
     fotos.forEach((p, i) => p.actualizar(t, camara, { cara: 'feliz', brazos: [15, i === 0 ? 120 : 15], codos: [10, 40] }, re));
     if (n !== 2 && n !== 12) { jefe.actualizar(t, camara, { cara: 'feliz' }, re); ing.actualizar(t, camara, { cara: 'feliz' }, re); }
     if (n !== 8 && n !== 9) inspector.actualizar(t, camara, { cara: 'normal', brazos: [15, 15] }, re);
+    if (n !== 8) inspector2.actualizar(t, camara, { cara: 'normal', brazos: [15, 15] }, re);
   }
   if (n >= 5 && n <= 7) {
     publico.forEach((p, i) => p.actualizar(t, camara, { cara: n === 6 ? (i % 2 ? 'miedo' : 'sorpresa') : (n === 7 ? 'feliz' : 'normal'),
