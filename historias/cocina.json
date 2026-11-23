@@ -1,0 +1,30 @@
+{
+  "titulo": "SIN CHISME|NO HAY AGUA",
+  "personajes": {
+    "lupe": {
+      "estilo": "fino", "cuerpo": "vestido", "pelo": "moño",
+      "ropa": "#8fb3d9", "falda": "#c8735a", "objeto": "vaso",
+      "voz": "matilda"
+    },
+    "vecino": {
+      "estilo": "fino", "pelo": "ninguno", "ropa": "#d9c08f",
+      "voz": "charlie"
+    }
+  },
+  "escenas": [
+    {
+      "fondo": "cocina",
+      "personajes": [
+        {"id": "vecino", "x": 0.42, "escala": 0.55, "asomado": [343, 443, 566, 1000], "y": 0.5,
+         "expresion": "preocupado", "mirada": 1, "entra": false},
+        {"id": "lupe", "x": 0.68, "escala": 1.15, "expresion": "picara", "mirada": -1, "brazo": "sostiene"}
+      ],
+      "lineas": [
+        {"personaje": "vecino", "texto": "Doña Lupe... ¿me regala un vasito de agua?"},
+        {"personaje": "lupe", "texto": "Claro, mijo. Pero primero cuéntame el chisme."},
+        {"personaje": "vecino", "texto": "¡Ay no, otra vez no!", "expresion": "sorprendido"},
+        {"personaje": "lupe", "texto": "Sin chisme no hay agua.", "expresion": "feliz"}
+      ]
+    }
+  ]
+}

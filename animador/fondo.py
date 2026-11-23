@@ -107,7 +107,76 @@ def _calor(d, rnd):
         d.rectangle([cx + 30, base - alto + 210, cx + 80, base - alto + 240], fill=verde)
 
 
+def _azulejo(d, x, y, t):
+    d.rectangle([x, y, x + t, y + t], fill=(246, 242, 232), outline=(200, 196, 186), width=2)
+    c, azul = t // 2, (52, 74, 160)
+    for dx, dy in ((0, -1), (0, 1), (-1, 0), (1, 0)):
+        px, py = x + c + dx * t * 0.24, y + c + dy * t * 0.24
+        d.ellipse([px - t * 0.13, py - t * 0.13, px + t * 0.13, py + t * 0.13], fill=azul)
+    d.ellipse([x + c - t * 0.1, y + c - t * 0.1, x + c + t * 0.1, y + c + t * 0.1], fill=(236, 186, 60))
+    for qx, qy in ((x, y), (x + t, y), (x, y + t), (x + t, y + t)):
+        d.pieslice([qx - t * 0.18, qy - t * 0.18, qx + t * 0.18, qy + t * 0.18], 0, 360, fill=azul)
+
+
+def _cocina(d, rnd):
+    madera, oscura = (122, 78, 46), (84, 52, 30)
+    for y in (0, 70):  # vigas
+        d.rectangle([0, y, W, y + 52], fill=madera, outline=oscura, width=6)
+    # ventana
+    d.rectangle([330, 430, 820, 1010], fill=(150, 205, 238))
+    d.rectangle([330, 800, 820, 1010], fill=(226, 196, 156))
+    d.rectangle([330, 420, 820, 1020], outline=madera, width=26)
+    d.line([575, 420, 575, 1020], fill=madera, width=18)
+    d.rectangle([300, 1000, 850, 1050], fill=madera, outline=oscura, width=6)
+    # cactus en maceta
+    d.rounded_rectangle([395, 860, 445, 990], radius=25, fill=(92, 150, 80), outline=(40, 70, 36), width=6)
+    d.rounded_rectangle([445, 900, 480, 950], radius=16, fill=(92, 150, 80), outline=(40, 70, 36), width=6)
+    d.polygon([370, 960, 470, 960, 458, 1002, 382, 1002], fill=(196, 110, 70), outline=(110, 60, 36))
+    # barra con cazuelas
+    d.rectangle([0, 190, 300, 214], fill=oscura)
+    for cx, r in ((60, 70), (190, 85)):
+        d.line([cx, 214, cx, 280], fill=(60, 50, 40), width=6)
+        d.ellipse([cx - r, 280, cx + r, 280 + r * 2.2], fill=(186, 104, 64), outline=(120, 62, 36), width=8)
+        d.ellipse([cx - r * 0.7, 300, cx + r * 0.7, 280 + r * 1.9], fill=(170, 92, 56))
+    # alacena verde menta
+    menta, menta_os = (170, 214, 190), (120, 164, 140)
+    d.rounded_rectangle([860, 300, 1100, 760], radius=14, fill=menta, outline=menta_os, width=8)
+    d.rounded_rectangle([890, 340, 1060, 720], radius=10, outline=menta_os, width=6)
+    # franja de azulejos
+    t = 90
+    for y in range(1060, 1300, t):
+        for x in range(-20, W, t):
+            _azulejo(d, x, y, t)
+    # encimera y muebles
+    d.rectangle([0, 1290, W, 1335], fill=(222, 190, 150), outline=(170, 136, 100), width=5)
+    d.rectangle([0, 1335, W, 1720], fill=menta, outline=menta_os, width=6)
+    for x in range(560, W, 260):
+        d.rounded_rectangle([x, 1370, x + 230, 1690], radius=10, outline=menta_os, width=6)
+        d.ellipse([x + 190, 1500, x + 214, 1524], fill=(100, 90, 80))
+    # estufa
+    crema = (238, 228, 206)
+    d.rounded_rectangle([60, 1240, 520, 1730], radius=16, fill=crema, outline=(160, 150, 130), width=8)
+    d.rectangle([60, 1240, 520, 1290], fill=(70, 70, 74))
+    for x in range(110, 500, 85):
+        d.ellipse([x, 1310, x + 46, 1356], fill=(90, 86, 80))
+    d.rounded_rectangle([110, 1400, 470, 1660], radius=14, fill=(214, 204, 182), outline=(150, 140, 120), width=6)
+    d.rounded_rectangle([160, 1450, 420, 1600], radius=10, fill=(60, 52, 48))
+    d.rounded_rectangle([140, 1415, 440, 1432], radius=8, fill=(120, 110, 100))
+    for x in (160, 220, 280):  # llamas
+        d.polygon([x, 1240, x + 20, 1190, x + 40, 1240], fill=(80, 140, 240))
+        d.polygon([x + 8, 1240, x + 20, 1200, x + 32, 1240], fill=(255, 170, 40))
+    d.ellipse([120, 1200, 340, 1250], fill=(40, 40, 44), outline=(20, 20, 22), width=6)
+    d.rectangle([330, 1214, 430, 1230], fill=(50, 40, 34))
+    # piso de barro
+    d.rectangle([0, 1720, W, H], fill=(196, 112, 82))
+    for y in range(1720, H, 70):
+        d.line([0, y, W, y], fill=(160, 88, 62), width=4)
+    for x in range(0, W, 140):
+        d.line([x, 1720, x - 40, H], fill=(160, 88, 62), width=4)
+
+
 TEMAS = {
+    "cocina": ((236, 206, 166), (216, 180, 138), _cocina),
     "calor": ((255, 140, 50), (255, 214, 140), _calor),
     "oficina": ((214, 190, 140), (186, 158, 110), _oficina),
     "campo": ((120, 196, 240), (214, 238, 255), _campo),

@@ -148,7 +148,7 @@ class Animador:
             if linea and linea.get("personaje") == pid:
                 expresion = linea.get("expresion", expresion)
                 brazo = linea.get("brazo", brazo)
-            extra = tuple(sorted((k, v) for k, v in pc.items() if k in ("piel", "sudor", "ropa")))
+            extra = tuple(sorted((k, v) for k, v in pc.items() if k in ("piel", "sudor", "ropa", "mirada", "objeto")))
             spr = self._sprite(pid, boca, cerrados, expresion, brazo, pc.get("voltear", False), extra)
 
             esc_k = pc.get("escala", 1.25)
@@ -161,6 +161,16 @@ class Animador:
             cx = int(pc.get("x", 0.5) * W)
             pie = PISO_Y + int((1 - min(entrada, 1)) * 80)
             sw = int(w * 0.7)
+            if pc.get("asomado"):
+                # solo se ve dentro de un rectángulo (p. ej. una ventana); "y" = dónde queda la barbilla
+                x0, y0, x1, y1 = pc["asomado"]
+                capa = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+                capa.alpha_composite(img, (cx - w // 2, int(pc.get("y", 0.5) * H - h * 0.51 + rebote)))
+                mascara = Image.new("L", (W, H), 0)
+                mascara.paste(255, (x0, y0, x1, y1))
+                capa.putalpha(Image.composite(capa.getchannel("A"), mascara, mascara))
+                cuadro.alpha_composite(capa)
+                continue
             cuadro.alpha_composite(self.sombra.resize((sw, int(sw * 0.15))), (cx - sw // 2, PISO_Y - int(sw * 0.07)))
             cuadro.alpha_composite(img, (cx - w // 2, int(pie - h * 0.96 + rebote)))
 

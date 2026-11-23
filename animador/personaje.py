@@ -25,6 +25,8 @@ def _oscurecer(rgba, f=0.82):
 
 
 def dibujar(cfg, boca=False, ojos_cerrados=False, expresion="normal", brazo="abajo"):
+    if cfg.get("estilo") == "fino":
+        return dibujar_fino(cfg, boca, ojos_cerrados, expresion, brazo)
     im = Image.new("RGBA", (ANCHO * S, ALTO * S), (0, 0, 0, 0))
     d = ImageDraw.Draw(im)
 
@@ -178,6 +180,161 @@ def dibujar(cfg, boca=False, ojos_cerrados=False, expresion="normal", brazo="aba
             d.polygon(s(gx - r * 0.9, gy, gx + r * 0.9, gy, gx, gy - r * 2.4), fill=(120, 200, 255, 255))
             d.ellipse(s(gx - r, gy - r, gx + r, gy + r), fill=(120, 200, 255, 255), outline=TINTA, width=int(5 * S))
             d.ellipse(s(gx - r * 0.5, gy - r * 0.5, gx - r * 0.1, gy - r * 0.1), fill=(255, 255, 255, 255))
+
+    im = im.resize((ANCHO, ALTO), Image.LANCZOS)
+    if cfg.get("voltear"):
+        im = im.transpose(Image.FLIP_LEFT_RIGHT)
+    return im
+
+
+# ======================================================================
+# Estilo "fino": cabeza blanca grande, ojos con blanco y pupila, párpados,
+# brazos finos, vestido con delantal y objetos en la mano.
+#   cuerpo: pantalon | vestido      mirada: -1 (izq) | 0 | 1 (der)
+#   pelo:   moño | corto | ninguno   objeto: vaso | ninguno
+#   expresiones: normal, picara, preocupado, sorprendido, feliz, enojado, triste
+# ======================================================================
+def dibujar_fino(cfg, boca=False, ojos_cerrados=False, expresion="normal", brazo="abajo"):
+    im = Image.new("RGBA", (ANCHO * S, ALTO * S), (0, 0, 0, 0))
+    d = ImageDraw.Draw(im)
+
+    def s(*v):
+        return [int(x * S) for x in v]
+
+    lw = int(7 * S)
+    piel = _hex(cfg.get("piel", "#ffffff"))
+    ropa = _hex(cfg.get("ropa", "#8fb3d9"))
+    pelo = _hex(cfg.get("pelo_color", "#141414"))
+    cuerpo = cfg.get("cuerpo", "pantalon")
+    mirada = cfg.get("mirada", 0) * 16
+
+    # --- piernas y zapatos ---
+    y_cad = 870 if cuerpo == "vestido" else 760
+    for x0, x1 in ((262, 248), (338, 352)):
+        d.line(s(x0, y_cad, x1, 945), fill=TINTA, width=int(8 * S))
+    for x in (232, 368):
+        d.ellipse(s(x - 42, 928, x + 42, 966), fill=(20, 20, 22, 255))
+
+    # --- brazos ---
+    hi, hd = (215, 545), (385, 545)
+    mano_i = {"arriba": (60, 420), "sostiene": (300, 690), "señala": (150, 720)}.get(brazo, (165, 730))
+    mano_d = {"sostiene": (515, 500), "señala": (560, 520)}.get(brazo, (435, 730))
+    d.line(s(*hi, *mano_i), fill=TINTA, width=int(8 * S))
+    d.line(s(*hd, *mano_d), fill=TINTA, width=int(8 * S))
+
+    # --- torso ---
+    if cuerpo == "vestido":
+        falda = _hex(cfg.get("falda", "#c8735a"))
+        d.polygon(s(205, 640, 395, 640, 455, 880, 145, 880), fill=falda, outline=TINTA, width=lw)
+        d.rounded_rectangle(s(200, 495, 400, 665), radius=55 * S, fill=ropa, outline=TINTA, width=lw)
+        for cx in (200, 400):  # mangas cortas
+            d.ellipse(s(cx - 42, 505, cx + 42, 590), fill=ropa, outline=TINTA, width=lw)
+        if cfg.get("delantal", True):
+            dl = _hex(cfg.get("delantal_color", "#f3e2c2"))
+            d.rounded_rectangle(s(232, 545, 368, 640), radius=12 * S, fill=dl, outline=TINTA, width=int(5 * S))
+            d.polygon(s(210, 630, 390, 630, 420, 860, 180, 860), fill=dl, outline=TINTA, width=int(5 * S))
+            d.line(s(205, 640, 395, 640), fill=TINTA, width=int(5 * S))
+            colores = [(214, 120, 96), (110, 160, 190), (230, 170, 80)]
+            k = 0
+            for yy in range(572, 850, 44):
+                for xx in range(200, 420, 44):
+                    m = (yy - 630) * 0.13
+                    if (yy < 625 and 250 < xx < 350) or (yy > 650 and 222 - m < xx < 378 + m):
+                        d.ellipse(s(xx - 9, yy - 9, xx + 9, yy + 9), fill=colores[k % 3] + (255,))
+                        k += 1
+    else:
+        d.rounded_rectangle(s(200, 495, 400, 775), radius=60 * S, fill=ropa, outline=TINTA, width=lw)
+        d.line(s(300, 560, 300, 770), fill=TINTA, width=int(4 * S))
+        d.polygon(s(258, 497, 342, 497, 300, 560), fill=(250, 250, 250, 255), outline=TINTA, width=int(4 * S))
+
+    # --- pelo detrás (moño) ---
+    est_pelo = cfg.get("pelo", "ninguno")
+    if est_pelo == "moño":
+        d.ellipse(s(450, 230, 560, 340), fill=pelo, outline=TINTA, width=lw)
+
+    # --- cabeza ---
+    d.ellipse(s(92, 92, 508, 508), fill=piel)
+    if est_pelo in ("moño", "corto"):
+        # pelo en una capa recortada con la forma de la cabeza; la frente hace una curva
+        capa = Image.new("RGBA", im.size, (0, 0, 0, 0))
+        dc = ImageDraw.Draw(capa)
+        dc.ellipse(s(92, 92, 508, 508), fill=pelo)
+        frente = (60, 205, 540, 700) if est_pelo == "moño" else (50, 185, 550, 700)
+        dc.ellipse(s(*frente), fill=piel, outline=TINTA, width=lw)
+        if est_pelo == "moño":
+            dc.line(s(300, 92, 290, 200), fill=(70, 70, 70, 255), width=int(4 * S))
+        mascara = Image.new("L", im.size, 0)
+        ImageDraw.Draw(mascara).ellipse(s(92, 92, 508, 508), fill=255)
+        im.paste(capa, (0, 0), mascara)
+    d.ellipse(s(92, 92, 508, 508), outline=TINTA, width=lw)
+
+    # --- ojos ---
+    ojos = ((222, 315), (378, 315))
+    for i, (ex, ey) in enumerate(ojos):
+        if ojos_cerrados or expresion == "feliz":
+            if expresion == "feliz" and not ojos_cerrados:
+                d.arc(s(ex - 32, ey - 20, ex + 32, ey + 30), 200, 340, fill=TINTA, width=int(9 * S))
+            else:
+                d.arc(s(ex - 32, ey - 30, ex + 32, ey + 10), 20, 160, fill=TINTA, width=int(7 * S))
+            continue
+        rx, ry = (40, 34) if expresion in ("sorprendido", "preocupado") else (38, 30)
+        d.ellipse(s(ex - rx, ey - ry, ex + rx, ey + ry), fill=(255, 255, 255, 255), outline=TINTA, width=int(6 * S))
+        pr = 11 if expresion in ("sorprendido", "preocupado") else 15
+        px = ex + mirada
+        d.ellipse(s(px - pr, ey - pr + 4, px + pr, ey + pr + 4), fill=TINTA)
+        d.ellipse(s(px - pr * 0.5, ey - pr * 0.4, px - pr * 0.1, ey), fill=(255, 255, 255, 255))
+        if expresion in ("picara", "sospechoso"):  # párpado pesado
+            d.chord(s(ex - rx - 2, ey - ry - 2, ex + rx + 2, ey + ry + 2), 180, 360, fill=piel)
+            d.line(s(ex - rx - 4, ey, ex + rx + 4, ey - 4), fill=TINTA, width=int(8 * S))
+        elif expresion == "enojado":
+            lado = 1 if i == 0 else -1
+            d.polygon(s(ex - rx - 4, ey - ry - 6, ex + rx + 4, ey - ry - 6,
+                        ex + lado * rx, ey - (4 if lado == 1 else ry), ex - lado * rx, ey - (ry if lado == 1 else 4)),
+                      fill=piel)
+
+    # --- cejas gruesas ---
+    cejas = {
+        "picara": ((180, 262, 262, 280), (338, 250, 420, 238)),
+        "sospechoso": ((180, 262, 262, 280), (338, 250, 420, 238)),
+        "enojado": ((182, 252, 262, 282), (338, 282, 418, 252)),
+        "preocupado": ((185, 268, 258, 246), (342, 246, 415, 268)),
+        "triste": ((185, 270, 258, 250), (342, 250, 415, 270)),
+        "sorprendido": ((185, 250, 262, 238), (338, 238, 415, 250)),
+        "feliz": ((185, 258, 260, 250), (340, 250, 415, 258)),
+    }.get(expresion, ((185, 262, 260, 256), (340, 256, 415, 262)))
+    for c in cejas:
+        d.line(s(*c), fill=TINTA, width=int(13 * S))
+
+    # --- boca ---
+    by = 420
+    if boca:
+        if expresion == "feliz":
+            d.chord(s(240, by - 30, 360, by + 50), 0, 180, fill=(90, 20, 30, 255), outline=TINTA, width=lw)
+            d.rectangle(s(258, by + 12, 342, by + 22), fill=(255, 255, 255, 255))
+        else:
+            d.ellipse(s(272, by - 14, 328, by + 40), fill=(90, 20, 30, 255), outline=TINTA, width=lw)
+            d.ellipse(s(284, by + 16, 316, by + 36), fill=(235, 95, 105, 255))
+    elif expresion in ("picara", "sospechoso"):
+        d.arc(s(235, by - 50, 365, by + 20), 25, 150, fill=TINTA, width=int(7 * S))
+        d.line(s(352, by + 8, 372, by - 6), fill=TINTA, width=int(7 * S))
+    elif expresion in ("preocupado", "triste", "enojado"):
+        d.arc(s(262, by + 4, 338, by + 44), 200, 340, fill=TINTA, width=int(7 * S))
+    elif expresion == "sorprendido":
+        d.ellipse(s(285, by - 6, 315, by + 30), fill=(90, 20, 30, 255), outline=TINTA, width=lw)
+    else:
+        d.arc(s(255, by - 40, 345, by + 10), 25, 155, fill=TINTA, width=int(7 * S))
+
+    # --- objeto en la mano ---
+    if cfg.get("objeto") == "vaso" and brazo == "sostiene":
+        mx, my = mano_d
+        d.polygon(s(mx - 40, my - 120, mx + 40, my - 120, mx + 32, my + 10, mx - 32, my + 10),
+                  fill=(205, 232, 248, 150), outline=TINTA, width=int(5 * S))
+        d.polygon(s(mx - 36, my - 70, mx + 36, my - 70, mx + 32, my + 6, mx - 32, my + 6), fill=(120, 185, 230, 200))
+        d.line(s(mx - 24, my - 105, mx - 20, my - 10), fill=(255, 255, 255, 220), width=int(6 * S))
+
+    # --- manos (pequeñas, contorno) ---
+    for mx, my in (mano_i, mano_d):
+        d.ellipse(s(mx - 22, my - 22, mx + 22, my + 22), fill=(255, 255, 255, 255), outline=TINTA, width=lw)
 
     im = im.resize((ANCHO, ALTO), Image.LANCZOS)
     if cfg.get("voltear"):
