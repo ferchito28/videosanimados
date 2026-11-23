@@ -14,6 +14,9 @@ const FPS = parseInt(fpsTxt || '30', 10);
 // --cuadros=1.5,3.2 → guarda solo esos cuadros como JPG (para revisar rápido)
 const SOLO = extra && extra.startsWith('--cuadros=') ? extra.slice(10).split(',').map(Number) : null;
 
+// un poco más de nitidez, contraste y color (que no se vea opaco)
+const FILTRO = 'unsharp=5:5:0.7:5:5:0,eq=contrast=1.07:saturation=1.2:gamma=0.97';
+
 const TIPOS = { '.html': 'text/html', '.js': 'text/javascript', '.ttf': 'font/ttf', '.json': 'application/json' };
 
 const servidor = http.createServer((req, res) => {
@@ -47,7 +50,7 @@ const servidor = http.createServer((req, res) => {
 
   fs.mkdirSync(path.dirname(path.resolve(salida)), { recursive: true });
   const ff = spawn('ffmpeg', ['-y', '-loglevel', 'error', '-f', 'image2pipe', '-framerate', String(FPS),
-    '-c:v', 'mjpeg', '-i', '-', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20',
+    '-c:v', 'mjpeg', '-i', '-', '-vf', FILTRO, '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '17',
     '-pix_fmt', 'yuv420p', '-movflags', '+faststart', salida], { stdio: ['pipe', 'inherit', 'inherit'] });
 
   const inicio = Date.now();

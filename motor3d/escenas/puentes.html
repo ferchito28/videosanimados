@@ -351,8 +351,8 @@ for (let i = 0; i < 8; i++) gentePaso.push(new Personaje2D(TIPOS[(i * 3 + 2) % T
 
 // ====================================================================== atmósfera
 R.convertir(escena);
-R.neblina(escena, 0xbfd8ef, 0.0016);
-const NIEBLA = { dia: [0xbfd8ef, 0.0016], calor: [0xffd2a8, 0.0019], invierno: [0xdfe8f2, 0.004] };
+R.neblina(escena, 0xbfd8ef, 0.0008);
+const NIEBLA = { dia: [0xbfd8ef, 0.0008], calor: [0xffd2a8, 0.001], invierno: [0xdfe8f2, 0.0022] };
 const nieve = R.particulas(escena, 600, 0xffffff, 0.16);
 let temblor = 0, destello = 0, T = 0;
 function atmosfera(amb, ambB, k, t, tm) {
@@ -593,7 +593,7 @@ window.cuadro = (t) => {
   if (F.over) F.over(r.ctx, u, dur, P);
   K.destello(r.ctx, destello);
   K.subtitulos(r.ctx, datos.subs, t);
-  return r.salida.toDataURL('image/jpeg', 0.9);
+  return r.salida.toDataURL('image/jpeg', 0.96);
 };
 window.listo = Promise.resolve();
 </script>

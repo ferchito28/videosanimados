@@ -19,12 +19,14 @@ export function crearRenderRealista() {
   gl.shadowMap.type = THREE.PCFSoftShadowMap;
   const escena = new THREE.Scene();
   const camara = new THREE.PerspectiveCamera(45, ANCHO / ALTO, 0.1, 3000);
-  const composer = new EffectComposer(gl);
+  // MSAA en el render interno: sin esto los bordes salen borrosos/dentados
+  const rt = new THREE.WebGLRenderTarget(ANCHO, ALTO, { type: THREE.HalfFloatType, samples: 4 });
+  const composer = new EffectComposer(gl, rt);
   composer.setSize(ANCHO, ALTO);
   composer.addPass(new RenderPass(escena, camara));
-  const bokeh = new BokehPass(escena, camara, { focus: 12, aperture: 0.0012, maxblur: 0.009 });
+  const bokeh = new BokehPass(escena, camara, { focus: 12, aperture: 0.0005, maxblur: 0.004 });
   composer.addPass(bokeh);
-  const bloom = new UnrealBloomPass(new THREE.Vector2(ANCHO / 2, ALTO / 2), 0.6, 0.6, 0.93);
+  const bloom = new UnrealBloomPass(new THREE.Vector2(ANCHO / 2, ALTO / 2), 0.3, 0.4, 0.96);
   composer.addPass(bloom);
   composer.addPass(new OutputPass());
   const salida = document.createElement('canvas');
@@ -38,7 +40,7 @@ export function crearRenderRealista() {
 // Enfoca a cierta distancia de la cámara (lo demás se ve borroso)
 export function enfocar(r, distancia, desenfoque = 1) {
   r.bokeh.uniforms.focus.value = distancia;
-  r.bokeh.uniforms.aperture.value = 0.0012 * desenfoque;
+  r.bokeh.uniforms.aperture.value = 0.0005 * desenfoque;
 }
 
 // Cambia todos los materiales "toon" por materiales con luz realista

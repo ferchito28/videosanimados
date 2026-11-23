@@ -258,7 +258,7 @@ export function componer(r, subs, t) {
   r.efecto.render(r.escena, r.camara);
   r.ctx.drawImage(r.gl.domElement, 0, 0);
   if (subs) subtitulos(r.ctx, subs, t);
-  return r.salida.toDataURL('image/jpeg', 0.9);
+  return r.salida.toDataURL('image/jpeg', 0.96);
 }
 
 // ----------------------------------------------------------- utilería 3D
