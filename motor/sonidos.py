@@ -113,8 +113,38 @@ def agua():
     return r * burbujas * np.minimum(1, t * 20) * np.exp(-t * 3) * 1.2
 
 
+def fuego():
+    """Llamarada: rugido grave que sube rápido y se apaga despacio."""
+    t = _t(1.6)
+    r = _paso_bajo(_ruido(len(t), 21), 6)
+    ruge = r * (0.7 + 0.3 * np.sin(2 * np.pi * 7 * t))
+    grave = np.sin(2 * np.pi * (55 + 25 * np.exp(-t * 3)) * t) * 0.5
+    return (ruge * 1.6 + grave) * np.minimum(1, t * 14) * np.exp(-t * 1.6) * 0.9
+
+
+def fss():
+    """Vapor: siseo agudo."""
+    t = _t(0.9)
+    r = _ruido(len(t), 31)
+    agudo = r - _paso_bajo(r, 3)
+    return agudo * np.minimum(1, t * 25) * np.exp(-t * 2.5) * 0.7
+
+
+def chisporroteo():
+    """Aceite chisporroteando: chasquidos sueltos."""
+    t = _t(1.0)
+    rng = np.random.default_rng(41)
+    s = np.zeros(len(t))
+    for _ in range(45):
+        i = rng.integers(0, len(t) - 400)
+        n = rng.integers(60, 300)
+        s[i:i + n] += _ruido(n, int(rng.integers(1, 999))) * np.exp(-np.arange(n) / (n / 4)) * rng.uniform(0.3, 1)
+    return s * 0.6
+
+
 SONIDOS = {f.__name__: f for f in (golpe, golpecito, whoosh, boing, paso, resbalon,
-                                    pop, estrellas, tada, whoosh_suave, tac, crac, ding, agua)}
+                                    pop, estrellas, tada, whoosh_suave, tac, crac, ding, agua,
+                                    fuego, fss, chisporroteo)}
 
 
 def crear_pista(eventos, duracion, ruta):

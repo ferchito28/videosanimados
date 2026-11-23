@@ -1,0 +1,690 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Agua al aceite en llamas 3D</title>
+<script type="importmap">
+{ "imports": {
+    "three": "/motor3d/node_modules/three/build/three.module.js",
+    "three/addons/": "/motor3d/node_modules/three/examples/jsm/"
+} }
+</script>
+<style>body{margin:0;background:#000}</style>
+</head>
+<body>
+<script type="module">
+// ¿Por qué nunca debes echarle agua a un sartén con aceite en llamas?
+import * as THREE from 'three';
+import * as K from '/motor3d/kit.js';
+import { Personaje2D } from '/motor3d/personaje2d.js';
+import * as R from '/motor3d/realista.js';
+
+const datos = await (await fetch(new URLSearchParams(location.search).get('datos'))).json();
+window.DURACION = datos.duracion;
+await K.cargarFuente();
+
+const r = R.crearRenderRealista();
+const { escena, camara } = r;
+const cielo = K.cielo(escena, '#3f96ea', '#ffe0b0');
+const luz = K.luces(escena, [-25, 60, 40]);
+const mundo = { cielo, luz, hemi: luz.userData.hemi };
+
+const caja = (w, h, d, mat, x, y, z, padre = escena, sombra = true) => { const m = K.malla(new THREE.BoxGeometry(w, h, d), mat, x, y, z, sombra); padre.add(m); return m; };
+const bola = (rad, mat, x, y, z, padre = escena, sombra = true) => { const m = K.malla(new THREE.SphereGeometry(rad, 16, 12), mat, x, y, z, sombra); padre.add(m); return m; };
+const cil = (r1, r2, h, mat, x, y, z, padre = escena, seg = 16) => { const m = K.malla(new THREE.CylinderGeometry(r1, r2, h, seg), mat, x, y, z); padre.add(m); return m; };
+const cl = x => Math.min(1, Math.max(0, x));
+const lerp = (a, b, k) => a.map((v, i) => v + (b[i] - v) * k);
+let semilla = 17;
+const azar = () => ((semilla = (semilla * 9301 + 49297) % 233280) / 233280);
+const W = (P, k) => P.w(k);
+let T = 0, temblor = 0, destello = 0;
+
+// ------------------------------------------------------------------ texturas propias (cada una se crea UNA vez)
+function lienzo(w, h, dibujar, rep = [1, 1]) {
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  dibujar(c.getContext('2d'), w, h);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.repeat.set(...rep); t.anisotropy = 8; return t;
+}
+const texAzulejo = lienzo(256, 256, (x, w) => {          // talavera azul y blanco
+  for (let i = 0; i < 2; i++) for (let j = 0; j < 2; j++) {
+    const X = i * 128, Y = j * 128;
+    x.fillStyle = '#f6f1e4'; x.fillRect(X, Y, 128, 128);
+    x.strokeStyle = '#c9c0ae'; x.lineWidth = 4; x.strokeRect(X + 2, Y + 2, 124, 124);
+    x.fillStyle = (i + j) % 2 ? '#2a55a8' : '#e0a020';
+    x.beginPath(); x.arc(X + 64, Y + 64, 22, 0, 7); x.fill();
+    x.fillStyle = '#2a55a8';
+    for (let k = 0; k < 4; k++) { const a = k * Math.PI / 2 + Math.PI / 4; x.beginPath(); x.ellipse(X + 64 + Math.cos(a) * 40, Y + 64 + Math.sin(a) * 40, 16, 8, a, 0, 7); x.fill(); }
+    [[0, 0], [128, 0], [0, 128], [128, 128]].forEach(([a, b]) => { x.beginPath(); x.arc(X + a, Y + b, 18, 0, 7); x.fill(); });
+  }
+}, [10, 4]);
+const texPiso = lienzo(256, 256, (x) => {
+  for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) {
+    x.fillStyle = (i + j) % 2 ? '#b8562e' : '#d9b48a'; x.fillRect(i * 64, j * 64, 64, 64);
+    x.fillStyle = 'rgba(255,255,255,0.08)'; x.fillRect(i * 64 + 6, j * 64 + 6, 30, 8);
+  }
+  x.strokeStyle = 'rgba(60,30,20,0.5)'; x.lineWidth = 3; for (let k = 0; k <= 256; k += 64) { x.beginPath(); x.moveTo(k, 0); x.lineTo(k, 256); x.moveTo(0, k); x.lineTo(256, k); x.stroke(); }
+}, [7, 5]);
+const texLab = lienzo(256, 256, (x) => {
+  x.fillStyle = '#a9cbd8'; x.fillRect(0, 0, 256, 256);
+  x.strokeStyle = '#6f93a4'; x.lineWidth = 4; for (let k = 0; k <= 256; k += 64) { x.beginPath(); x.moveTo(k, 0); x.lineTo(k, 256); x.moveTo(0, k); x.lineTo(256, k); x.stroke(); }
+}, [30, 8]);
+const texPisoLab = lienzo(256, 256, (x) => {
+  for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) { x.fillStyle = (i + j) % 2 ? '#3d4a5c' : '#d8dee6'; x.fillRect(i * 64, j * 64, 64, 64); }
+}, [40, 12]);
+const texMadera = R.texturas.madera('#9a6238', [2, 1]);
+const texVentana = lienzo(512, 384, (c) => {
+  const g = c.createLinearGradient(0, 0, 0, 384); g.addColorStop(0, '#5aaaf0'); g.addColorStop(1, '#cfe8ff'); c.fillStyle = g; c.fillRect(0, 0, 512, 384);
+  c.fillStyle = '#ffffff'; [[90, 70], [330, 50]].forEach(([a, b]) => { c.beginPath(); c.arc(a, b, 30, 0, 7); c.arc(a + 35, b + 6, 26, 0, 7); c.arc(a - 30, b + 8, 22, 0, 7); c.fill(); });
+  const cols = ['#e2742a', '#f0d08a', '#8fb7e0', '#e27a6a', '#9ec7a8', '#c9a2d6'];
+  for (let i = 0; i < 9; i++) { const X = i * 58, h = 110 + (i * 47) % 130; c.fillStyle = cols[i % 6]; c.fillRect(X, 384 - h, 54, h);
+    for (let y = 384 - h + 14; y < 376; y += 26) for (let xx = X + 8; xx < X + 48; xx += 15) { c.fillStyle = '#3a5a80'; c.fillRect(xx, y, 9, 13); } }
+  c.fillStyle = '#4f9a4a'; for (let i = 0; i < 8; i++) { c.beginPath(); c.arc(i * 70 + 20, 384, 34, 0, 7); c.fill(); }
+});
+const texPizarron = lienzo(512, 340, (c) => {
+  c.fillStyle = '#21443a'; c.fillRect(0, 0, 512, 340);
+  c.fillStyle = 'rgba(255,255,255,0.06)'; for (let i = 0; i < 30; i++) c.fillRect(Math.random() * 512, Math.random() * 340, 60, 3);
+  c.font = '54px Anton'; c.textAlign = 'left'; c.textBaseline = 'middle';
+  c.fillStyle = '#9fd3ff'; c.fillText('AGUA', 40, 80); c.fillStyle = '#ffffff'; c.fillText('1.0 kg/L', 250, 80);
+  c.fillStyle = '#ffd45a'; c.fillText('ACEITE', 40, 175); c.fillStyle = '#ffffff'; c.fillText('0.9 kg/L', 250, 175);
+  c.strokeStyle = '#ffffff'; c.lineWidth = 5; c.beginPath(); c.moveTo(40, 230); c.lineTo(470, 230); c.stroke();
+  c.fillStyle = '#ff8a8a'; c.font = '50px Anton'; c.fillText('AGUA = MÁS PESADA', 40, 285);
+});
+const texChecker = lienzo(64, 64, (c) => { c.fillStyle = '#ffffff'; c.fillRect(0, 0, 64, 64); c.fillStyle = '#e23c3c'; c.fillRect(0, 0, 32, 32); c.fillRect(32, 32, 32, 32); }, [4, 3]);
+
+// ------------------------------------------------------------------ materiales
+const BLANCO = K.toon(0xf4f2ee), NEGRO = K.toon(0x1e1e22), ACERO = K.toon(0x9aa3ae), MADERA = K.toon(0x8a5a35);
+const GRANITO = K.toon(0x6f625c), CREMA = K.toon(0xf6efe2), DORADO = K.toon(0xffc62a);
+const fuegoMat = (r, g, b, op = 0.92) => { const m = new THREE.MeshBasicMaterial({ color: new THREE.Color(r, g, b), transparent: true, opacity: op, depthWrite: false }); m.userData.outlineParameters = { visible: false }; return m; };
+const LLAMA_EXT = fuegoMat(1.45, 0.3, 0.03), LLAMA_INT = fuegoMat(1.7, 1.0, 0.15), LLAMA_AZUL = fuegoMat(0.25, 0.55, 1.8, 0.85);
+const BOLA_MATS = [fuegoMat(1.7, 1.0, 0.2, 0.9), fuegoMat(1.5, 0.45, 0.06, 0.88), fuegoMat(1.0, 0.18, 0.03, 0.88)];
+const HUMO_MAT = new THREE.MeshStandardMaterial({ color: 0x3a3634, transparent: true, opacity: 0.0, depthWrite: false, roughness: 1 });
+const VAPOR_MAT = new THREE.MeshStandardMaterial({ color: 0xffffff, transparent: true, opacity: 0.75, depthWrite: false, roughness: 0.6, emissive: 0x1a2028 });
+const AGUA_MAT = new THREE.MeshStandardMaterial({ color: 0x1f7fe8, roughness: 0.15, metalness: 0.1, emissive: 0x0c3f9a });
+const GOTA_ACEITE = new THREE.MeshStandardMaterial({ color: 0xffb020, roughness: 0.25, emissive: 0x6a3a00, transparent: true, opacity: 1 });
+
+// forma de llama (gota alargada)
+const GEO_LLAMA = new THREE.LatheGeometry([[0, 0], [0.33, 0.12], [0.45, 0.38], [0.38, 0.7], [0.2, 1.05], [0.05, 1.35], [0, 1.45]].map(([a, b]) => new THREE.Vector2(a, b)), 14);
+// grupo de llamas: devuelve actualizar(alto, ancho)
+function crearFuego(padre, x, y, z, n = 12, mats = [LLAMA_EXT, LLAMA_INT]) {
+  const g = new THREE.Group(); g.position.set(x, y, z); padre.add(g);
+  const ll = [];
+  for (let i = 0; i < n; i++) {
+    const a = i / n * Math.PI * 2 + azar(), rr = 0.25 + azar() * 0.75;
+    const ext = new THREE.Mesh(GEO_LLAMA, mats[0]); const int = new THREE.Mesh(GEO_LLAMA, mats[1]);
+    g.add(ext, int); ll.push({ ext, int, a, rr, f: 6 + azar() * 6, ph: azar() * 7, s: 0.7 + azar() * 0.6 });
+  }
+  const fn = (alto, ancho = 0.6, inclina = 0) => {
+    g.visible = alto > 0.01; if (!g.visible) return;
+    ll.forEach(o => {
+      const px = Math.cos(o.a) * o.rr * ancho, pz = Math.sin(o.a) * o.rr * ancho * 0.8;
+      const h = alto * o.s * (0.72 + 0.28 * Math.sin(T * o.f + o.ph)) * (1.1 - o.rr * 0.4);
+      const w = Math.max(0.15, ancho * 0.75) * (0.8 + 0.2 * Math.sin(T * o.f * 1.3 + o.ph));
+      o.ext.position.set(px, 0, pz); o.ext.scale.set(w, h, w);
+      o.int.position.set(px, 0.02, pz + 0.01); o.int.scale.set(w * 0.55, h * 0.6, w * 0.55);
+      const sway = Math.sin(T * 9 + o.ph) * 0.12 + inclina;
+      o.ext.rotation.z = sway; o.int.rotation.z = sway;
+    });
+  };
+  fn.grupo = g;
+  return fn;
+}
+// bola de fuego: devuelve actualizar(p) con p de 0 a 1 (sube, se aplasta en el techo, se vuelve humo)
+function crearBola(padre, x, y, z, techo, escala = 1, n = 70) {
+  const g = new THREE.Group(); g.position.set(x, y, z); padre.add(g);
+  const geo = new THREE.SphereGeometry(1, 14, 10);
+  const partes = [], humos = [];
+  for (let i = 0; i < n; i++) {
+    const h = Math.pow(azar(), 0.8), a = azar() * Math.PI * 2, rr = azar();
+    const m = new THREE.Mesh(geo, BOLA_MATS[h < 0.3 ? 0 : (i % 2 ? 1 : 2)]); g.add(m);
+    partes.push({ m, h, a, rr, s: 0.6 + azar() * 0.8, ph: azar() * 7 });
+  }
+  for (let i = 0; i < 26; i++) { const m = new THREE.Mesh(geo, HUMO_MAT); g.add(m); humos.push({ m, a: azar() * 7, rr: azar(), s: 0.8 + azar() }); }
+  const alto = techo - y;
+  return (p) => {
+    g.visible = p > 0.001 && p < 0.999; if (!g.visible) return;
+    const crece = K.frena(p / 0.22), apaga = cl((p - 0.5) / 0.45);
+    partes.forEach(o => {
+      const hh = o.h * crece;
+      const yy = hh * alto;
+      const arriba = cl((o.h - 0.72) / 0.28) * crece;                  // las de arriba se extienden por el techo
+      const radio = (0.5 + hh * 1.6 + arriba * 3.2) * escala * o.rr + Math.sin(T * 5 + o.ph) * 0.15 * escala;
+      o.m.position.set(Math.cos(o.a) * radio, Math.min(yy, alto - 0.5 * escala) + Math.sin(T * 7 + o.ph) * 0.1, Math.sin(o.a) * radio * 0.7);
+      const tam = (0.45 + o.s * 0.9 + arriba * 0.6) * escala * crece * (1 - apaga * 0.9);
+      o.m.scale.setScalar(Math.max(0.001, tam));
+    });
+    BOLA_MATS.forEach((m, i) => (m.opacity = (0.9 - i * 0.05) * (1 - apaga)));
+    HUMO_MAT.opacity = 0.75 * cl((p - 0.35) / 0.2) * (1 - cl((p - 0.85) / 0.15));
+    humos.forEach(o => {
+      const k = cl((p - 0.3) / 0.7);
+      o.m.position.set(Math.cos(o.a) * (1 + o.rr * 3.5) * escala, alto - (0.5 + o.rr) * escala, Math.sin(o.a) * o.rr * 2 * escala);
+      o.m.scale.setScalar((0.8 + k * 1.6) * o.s * escala);
+    });
+  };
+}
+// chorro de gotas de agua de un punto a otro (p de 0 a 1)
+function crearChorro(padre, n = 12, rad = 0.13) {
+  const gotas = []; for (let i = 0; i < n; i++) gotas.push(bola(rad * (0.7 + azar() * 0.6), AGUA_MAT, 0, -50, 0, padre, false));
+  return (p, de, a, alto = 2) => gotas.forEach((g, i) => {
+    const k = (p - i * 0.035) / 0.6; g.visible = k > 0 && k < 1; if (!g.visible) return;
+    const pos = lerp(de, a, k); pos[1] += Math.sin(k * Math.PI) * alto; g.position.set(...pos);
+  });
+}
+
+// ====================================================================== COCINA (x = 0)
+const SART = [0.6, 2.5, -6.5];             // sartén en la hornilla de enfrente-derecha
+const TECHO = 9;
+const cocina = new THREE.Group(); escena.add(cocina);
+R.vestir(caja(27, 0.2, 18, CREMA, 0, -0.1, 0.5, cocina), texPiso);
+R.vestir(caja(26.6, 9.4, 0.3, CREMA, 0, 4.7, -8.15, cocina, false), texAzulejo);
+const paredIzq = caja(0.3, 9.4, 18, K.toon(0xf3d9a4), -13.15, 4.7, 0.5, cocina, false);
+const paredDer = caja(0.3, 9.4, 18, K.toon(0xcfe6d8), 13.15, 4.7, 0.5, cocina, false);
+caja(26.6, 0.3, 18, CREMA, 0, TECHO + 0.15, 0.5, cocina, false);
+for (let x = -12; x <= 12; x += 3) caja(0.5, 0.45, 18, MADERA, x, TECHO - 0.22, 0.5, cocina, false);   // vigas
+// hollín que deja la bola de fuego
+const hollin = new THREE.Mesh(new THREE.CircleGeometry(3.4, 32), new THREE.MeshBasicMaterial({ color: 0x141010, transparent: true, opacity: 0, depthWrite: false }));
+hollin.rotation.x = Math.PI / 2; hollin.position.set(SART[0], TECHO - 0.47, SART[2] + 1); cocina.add(hollin);
+// puerta a la izquierda
+caja(0.25, 5.6, 3.0, K.toon(0x3a2a20), -12.98, 2.8, 3, cocina, false);
+[[-1.6], [1.6]].forEach(([d]) => caja(0.35, 5.8, 0.3, MADERA, -12.95, 2.9, 3 + d, cocina, false));
+caja(0.35, 0.3, 3.5, MADERA, -12.95, 5.75, 3, cocina, false);
+// estufa
+const estufa = new THREE.Group(); estufa.position.set(0, 0, -7.0); cocina.add(estufa);
+caja(2.7, 2.4, 2.0, BLANCO, 0, 1.2, 0, estufa);
+caja(2.7, 0.1, 2.0, NEGRO, 0, 2.45, 0, estufa);
+caja(2.0, 1.1, 0.06, K.toon(0x2a2a30), 0, 1.1, 1.0, estufa);
+caja(1.8, 0.1, 0.12, ACERO, 0, 1.85, 1.08, estufa);
+const perillas = [-0.95, -0.35, 0.35, 0.95].map(x => { const p = cil(0.13, 0.13, 0.14, NEGRO, x, 2.17, 1.05, estufa); p.rotation.x = Math.PI / 2;
+  caja(0.04, 0.16, 0.04, BLANCO, 0, 0.08, 0, p); return p; });
+[[-0.6, 0.5], [0.6, 0.5], [-0.6, -0.4], [0.6, -0.4]].forEach(([x, z]) => { const q = K.malla(new THREE.TorusGeometry(0.3, 0.04, 6, 18), NEGRO, x, 2.53, z); q.rotation.x = Math.PI / 2; estufa.add(q); });
+const flamaAzul = crearFuego(cocina, SART[0], 2.5, SART[2], 10, [LLAMA_AZUL, LLAMA_AZUL]);
+// campana
+caja(3.0, 0.5, 1.7, ACERO, 0, 6.4, -7.3, cocina); caja(1.1, 2.4, 0.9, ACERO, 0, 7.8, -7.55, cocina);
+// sartén
+const sarten = new THREE.Group(); sarten.position.set(...SART); cocina.add(sarten);
+cil(0.78, 0.62, 0.22, NEGRO, 0, 0.11, 0, sarten, 24);
+const aceiteCocina = cil(0.7, 0.7, 0.03, new THREE.MeshStandardMaterial({ color: 0xffb21e, emissive: 0x7a4a00, roughness: 0.2 }), 0, 0.2, 0, sarten, 24);
+const mango = caja(1.4, 0.12, 0.22, NEGRO, 1.3, 0.16, 0.25, sarten); mango.rotation.y = -0.35;
+const fuegoSarten = crearFuego(sarten, 0, 0.21, 0, 16);
+// tapa
+const tapa = new THREE.Group(); cocina.add(tapa);
+const domo = bola(0.82, ACERO, 0, 0, 0, tapa); domo.scale.y = 0.32;
+cil(0.85, 0.85, 0.05, K.toon(0x7a828c), 0, 0, 0, tapa, 24);
+bola(0.14, NEGRO, 0, 0.3, 0, tapa).scale.y = 0.7;
+const medalla = new THREE.Group(); medalla.position.set(0, 0.25, 0.45); tapa.add(medalla);
+caja(0.12, 0.5, 0.02, K.toon(0xe23c3c), -0.08, 0.05, 0, medalla); caja(0.12, 0.5, 0.02, K.toon(0x2d6fd6), 0.08, 0.05, 0, medalla);
+const disco = cil(0.24, 0.24, 0.05, new THREE.MeshStandardMaterial({ color: 0xffc62a, metalness: 0.8, roughness: 0.25, emissive: 0x5a3a00 }), 0, -0.25, 0.03, medalla, 24); disco.rotation.x = Math.PI / 2;
+medalla.visible = false;
+const fugas = crearFuego(cocina, SART[0], 2.6, SART[2], 10);   // lengüitas que salen por la orilla de la tapa
+// trapo húmedo
+const trapo = caja(1.2, 0.08, 0.9, K.toon(0x5fa8e0), -1.9, 2.5, -6.4, cocina); trapo.rotation.y = 0.3;
+const gotasTrapo = [0, 1, 2].map(i => bola(0.06, AGUA_MAT, -2.3 + i * 0.35, 2.3, -5.95, cocina, false));
+// muebles de cocina
+const muebleMat = K.toon(0x9a6238);
+[[-5.85, 9.3], [3.75, 4.9]].forEach(([x, w]) => {
+  R.vestir(caja(w, 2.3, 2.0, muebleMat, x, 1.15, -7.0, cocina), texMadera);
+  caja(w + 0.1, 0.15, 2.1, GRANITO, x, 2.38, -7.0, cocina);
+  for (let k = -w / 2 + 0.6; k < w / 2; k += 1.5) caja(0.4, 0.08, 0.08, ACERO, x + k, 1.9, -5.95, cocina);
+});
+[[-9.3, 2.2], [-2.7, 2.2], [3.9, 4.6]].forEach(([x, w]) => { R.vestir(caja(w, 2.2, 1.1, muebleMat, x, 6.7, -7.45, cocina), texMadera); caja(0.4, 0.08, 0.08, ACERO, x, 5.85, -6.88, cocina); });
+// refri con imanes y dibujos
+caja(2.3, 5.8, 2.2, K.toon(0xdfe7ef), -11.75, 2.9, -6.9, cocina);
+caja(2.32, 0.06, 2.22, K.toon(0x9aa3ae), -11.75, 4.1, -6.9, cocina);
+caja(0.12, 1.2, 0.12, ACERO, -10.85, 5.0, -5.75, cocina); caja(0.12, 1.4, 0.12, ACERO, -10.85, 2.9, -5.75, cocina);
+[[0xe23c3c, -12.3, 5], [0xffd600, -11.6, 4.6], [0x3cbf5a, -12.0, 3.2], [0x2d6fd6, -11.3, 2.4]].forEach(([c, x, y]) => caja(0.5, 0.4, 0.04, K.toon(c), x, y, -5.78, cocina));
+K.cartel(cocina, '★ ABUE ★', -11.8, 3.8, -5.77, 1.4, 0.7, '#ffffff', '#e2742a');
+// fregadero y ventana
+caja(2.4, 0.08, 1.4, K.toon(0x5a6068), -6, 2.47, -6.9, cocina);
+cil(0.07, 0.07, 1.0, ACERO, -6, 2.95, -7.6, cocina); caja(0.1, 0.1, 0.7, ACERO, -6, 3.42, -7.3, cocina);
+const vidrio = new THREE.Mesh(new THREE.PlaneGeometry(4, 2.6), new THREE.MeshBasicMaterial({ map: texVentana })); vidrio.position.set(-6, 5.6, -7.97); cocina.add(vidrio);
+caja(4.4, 0.25, 0.3, BLANCO, -6, 4.2, -7.85, cocina); caja(4.4, 0.25, 0.3, BLANCO, -6, 7.0, -7.85, cocina); caja(0.2, 2.8, 0.3, BLANCO, -6, 5.6, -7.85, cocina);
+[-7.4, -4.6].forEach(x => { cil(0.25, 0.2, 0.35, K.toon(0xc0643a), x, 4.5, -7.6, cocina); bola(0.35, K.toon(0x3f9a4a), x, 4.95, -7.6, cocina); });
+// cosas en la barra
+caja(1.6, 1.0, 1.1, K.toon(0x2b2b30), 4.6, 2.95, -7.2, cocina); caja(1.0, 0.7, 0.05, K.toon(0x111418), 4.4, 2.95, -6.63, cocina);
+[[-3.4, 0xd23b3b], [-3.0, 0xffd600], [-2.6, 0x3cbf5a], [2.0, 0x8a5a35], [2.4, 0xffffff]].forEach(([x, c]) => { cil(0.15, 0.15, 0.45, K.toon(c), x, 2.68, -7.5, cocina); cil(0.16, 0.16, 0.1, ACERO, x, 2.95, -7.5, cocina); });
+cil(0.6, 0.4, 0.35, K.toon(0x2d6fd6), -8.5, 2.62, -6.9, cocina);
+[[-8.7, 0xe23c3c], [-8.3, 0xffd600], [-8.5, 0xff8a1a]].forEach(([x, c], i) => bola(0.2, K.toon(c), x, 2.95 + (i === 2 ? 0.18 : 0), -6.9 + (i === 2 ? 0.1 : 0), cocina));
+caja(1.2, 0.08, 0.8, K.toon(0xc9a06a), -4.0, 2.48, -6.6, cocina);
+caja(4.6, 0.06, 0.06, ACERO, -6, 3.6, -7.95, cocina, false);
+[-7.6, -7.0, -6.4].forEach((x, i) => { caja(0.08, 0.7, 0.04, i === 1 ? NEGRO : ACERO, x, 3.25, -7.92, cocina, false); });
+// reloj de pared
+const rel = cil(0.6, 0.6, 0.1, K.toon(0xffffff), -12.95, 7.0, -3, cocina, 24); rel.rotation.z = Math.PI / 2;
+// comedor con fiesta de cumpleaños de la abuela
+const MESA = [8.5, -1.5];
+R.vestir(caja(5.4, 0.25, 3.2, K.toon(0xffffff), MESA[0], 2.3, MESA[1], cocina), texChecker);
+[[-2.4, -1.3], [2.4, -1.3], [-2.4, 1.3], [2.4, 1.3]].forEach(([a, b]) => caja(0.2, 2.2, 0.2, MADERA, MESA[0] + a, 1.1, MESA[1] + b, cocina));
+[[-1.4, -2.3], [1.4, -2.3], [-1.4, 2.3], [1.4, 2.3]].forEach(([a, b]) => { caja(1.1, 0.15, 1.1, MADERA, MESA[0] + a, 1.5, MESA[1] + b, cocina); caja(1.1, 1.6, 0.12, MADERA, MESA[0] + a, 2.3, MESA[1] + b + Math.sign(b) * 0.5, cocina); });
+cil(0.75, 0.75, 0.55, K.toon(0xff8fb0), MESA[0], 2.7, MESA[1], cocina, 24); cil(0.55, 0.55, 0.4, K.toon(0xffffff), MESA[0], 3.17, MESA[1], cocina, 24);
+const velitas = [];
+for (let i = 0; i < 5; i++) { const a = i / 5 * Math.PI * 2; cil(0.04, 0.04, 0.35, K.toon([0xe23c3c, 0x2d6fd6, 0xffd600, 0x3cbf5a, 0xc9a2d6][i]), MESA[0] + Math.cos(a) * 0.35, 3.55, MESA[1] + Math.sin(a) * 0.35, cocina);
+  velitas.push(crearFuego(cocina, MESA[0] + Math.cos(a) * 0.35, 3.73, MESA[1] + Math.sin(a) * 0.35, 2)); }
+[[-2, -0.8], [2, -0.8], [-2, 0.8], [2, 0.8]].forEach(([a, b]) => cil(0.4, 0.35, 0.05, K.toon(0xffffff), MESA[0] + a, 2.45, MESA[1] + b, cocina));
+cil(0.3, 0.26, 0.8, new THREE.MeshStandardMaterial({ color: 0xbfe4ff, transparent: true, opacity: 0.6 }), MESA[0] - 1.2, 2.83, MESA[1] + 0.2, cocina);
+cil(0.4, 0.4, 0.3, K.toon(0xe2742a), MESA[0] + 1.2, 2.6, MESA[1] + 0.2, cocina);
+K.cartel(cocina, '¡FELIZ CUMPLE, ABUE!', 9.0, 7.3, -7.95, 6.5, 1.1, '#e23c6a', '#ffffff');
+const globos = [];
+[[12.2, 6.2, -6.5, 0xe23c3c], [11.4, 6.8, -7.0, 0xffd600], [12.4, 6.6, -4.8, 0x2d6fd6], [6.6, 6.9, -7.3, 0x3cbf5a], [12.3, 6.0, 1.5, 0xff8fb0], [12.1, 6.7, 3.0, 0xc9a2d6]].forEach(([x, y, z, c]) => {
+  const g = bola(0.55, K.toon(c), x, y, z, cocina); g.scale.y = 1.2; globos.push(g);
+  caja(0.02, 2.5, 0.02, K.toon(0x555555), x, y - 1.9, z, cocina, false);
+});
+K.banderitas(cocina, [-12.8, 8.6, -1], [12.8, 8.6, -1], 26); K.banderitas(cocina, [-12.8, 8.6, 3.5], [12.8, 8.6, 3.5], 26);
+const pinata = new THREE.Group(); pinata.position.set(9.5, 6.6, 2.4); cocina.add(pinata);
+bola(0.7, K.toon(0xff3f8a), 0, 0, 0, pinata);
+for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2; const c = K.malla(new THREE.ConeGeometry(0.28, 1.2, 10), K.toon([0xffd600, 0x2d6fd6, 0x3cbf5a][i % 3]), Math.cos(a) * 1.05, Math.sin(a) * 1.05, 0); c.rotation.z = a - Math.PI / 2; pinata.add(c); }
+caja(0.02, 2.2, 0.02, K.toon(0x555555), 9.5, 7.9, 2.4, cocina, false);
+// lámpara del techo
+cil(0.05, 0.05, 1.0, NEGRO, 4, 8.5, 0, cocina); cil(0.5, 0.9, 0.6, K.toon(0xffe39a, { emissive: 0xc89a30, emissiveIntensity: 0.8 }), 4, 7.8, 0, cocina);
+const luzCocina = new THREE.PointLight(0xffd8a0, 38, 30, 1.4); luzCocina.position.set(3, 7.4, 0); cocina.add(luzCocina);
+const luzCocina2 = new THREE.PointLight(0xffe2b8, 40, 26, 1.5); luzCocina2.position.set(-6, 6.5, -3); cocina.add(luzCocina2);
+const luzFuego = new THREE.PointLight(0xff8a2a, 0, 22, 1.4); luzFuego.position.set(SART[0], 4, SART[2] + 1.5); cocina.add(luzFuego);
+const bolaCocina = crearBola(cocina, SART[0], SART[1] + 0.2, SART[2], TECHO, 1.1);
+const chorroCocina = crearChorro(cocina, 14, 0.13);
+
+// la familia
+const mama = new Personaje2D('mama', 4.4).agregar(cocina, -2.3, -4.9);
+const tio = new Personaje2D('tio', 4.5).agregar(cocina, 5.5, -3.8);
+const abuela = new Personaje2D('abuela', 4.0).agregar(cocina, 8.5, -4.0);
+const bombero = new Personaje2D('bombero', 4.6).agregar(cocina, -9.5, 2.6);
+const familia = [
+  new Personaje2D('pasajera', 4.3, 0.45).agregar(cocina, 6.6, -4.3),
+  new Personaje2D('pasajero', 4.5, 0.45).agregar(cocina, 10.6, -4.1),
+  new Personaje2D('nino', 3.1, 0.5).agregar(cocina, 6.2, 0.7),
+  new Personaje2D('nina', 3.1, 0.5).agregar(cocina, 11.0, 0.6),
+  new Personaje2D('chofer', 4.4, 0.45).agregar(cocina, 12.0, -6.3),
+  new Personaje2D('jefe', 4.4, 0.45).agregar(cocina, -9.0, -4.2),
+];
+
+// ====================================================================== LABORATORIO (x = 500)
+const XL = 500, XV = XL + 45, XG = XL + 78;
+const lab = new THREE.Group(); escena.add(lab);
+R.vestir(caja(170, 0.2, 44, BLANCO, XL + 35, -0.1, 0, lab), texPisoLab);
+R.vestir(caja(170, 24, 0.3, BLANCO, XL + 35, 12, -12.15, lab, false), texLab);
+[-1, 1].forEach(l => caja(0.3, 24, 44, K.toon(0xdfe7ee), XL + 35 + l * 85, 12, 0, lab, false));
+K.cartel(lab, 'LABORATORIO DE COCINA', XL, 15.5, -11.95, 12, 1.8, '#2d4fa8', '#ffffff');
+// estufa gigante y sartén cortado a la mitad (se ve por dentro)
+caja(12.5, 3, 6.2, K.toon(0x3a3f48), XL, 1.5, 0, lab);
+caja(12.6, 0.3, 6.3, ACERO, XL, 3.0, 0, lab);
+const flamasLab = [-4, -2, 0, 2, 4].map(x => crearFuego(lab, XL + x, 2.6, 0.6, 8, [LLAMA_AZUL, LLAMA_AZUL]));
+const FONDO = new THREE.MeshStandardMaterial({ color: 0x3a3a40, emissive: 0x000000, roughness: 0.5 });
+caja(11.4, 0.5, 5.6, FONDO, XL, 3.45, 0, lab);
+const OLLA = K.toon(0x2e2e34);
+[-1, 1].forEach(l => caja(0.4, 3.4, 5.6, OLLA, XL + l * 5.9, 5.0, 0, lab));
+caja(12.2, 3.4, 0.4, OLLA, XL, 5.0, -2.95, lab);
+caja(5, 0.5, 0.9, OLLA, XL + 8.4, 6.0, 0, lab);
+const ACEITE_MAT = new THREE.MeshStandardMaterial({ color: 0xf2b21e, transparent: true, opacity: 0.38, depthWrite: false, roughness: 0.15, emissive: 0x4a2a00 });
+const aceiteLab = caja(11.4, 2.4, 5.4, ACEITE_MAT, XL, 4.9, 0, lab, false);
+// orillas del corte (rayita clara para que se lea "corte")
+caja(11.8, 0.08, 0.08, K.toon(0xffe27a), XL, 6.1, 2.72, lab, false);
+// vaso gigante que se voltea
+const vasoG = new THREE.Group(); vasoG.position.set(XL - 1.5, 12.2, 1.4); lab.add(vasoG);
+cil(1.5, 1.25, 3.4, new THREE.MeshStandardMaterial({ color: 0xdff2ff, transparent: true, opacity: 0.35, roughness: 0.05, depthWrite: false }), 0, 0, 0, vasoG);
+const aguaVaso = cil(1.35, 1.15, 2.4, AGUA_MAT, 0, -0.45, 0, vasoG);
+// gotas de agua, burbujas de vapor y gotitas de aceite
+const GX = [-2.6, -1.5, -0.4, 0.7, 1.8, 2.9], GZ = [1.4, 2.0, 1.1, 1.8, 1.3, 2.1];
+const AGUA_LAB = AGUA_MAT.clone(); AGUA_LAB.transparent = true; AGUA_LAB.opacity = 1;
+const gotasLab = GX.map((x, i) => { const g = bola(0.48, AGUA_LAB, XL + x, 12, GZ[i], lab, false); g.renderOrder = 3; return g; });
+aceiteLab.renderOrder = 1;
+K.cartel(lab, 'ACEITE 300°C', XL + 3.4, 6.9, 2.8, 3.6, 0.8, '#ffb020', '#1b1210');
+const vaporLab = GX.map((x, i) => { const v = bola(1, VAPOR_MAT, XL + x, 4, GZ[i], lab, false); v.renderOrder = 2; return v; });
+const gotitas = [];
+for (let i = 0; i < 42; i++) {
+  const g = bola(0.17 + azar() * 0.12, GOTA_ACEITE, XL, 0, 0, lab, false); g.renderOrder = 3;
+  const f = crearFuego(lab, 0, 0, 0, 3);
+  gotitas.push({ g, f, j: i % 6, dx: (azar() - 0.5) * 3.2, dz: (azar() - 0.5) * 1.6, dy: azar() * 4.5, ph: azar() * 7 });
+}
+const bolaLab = crearBola(lab, XL, 6.2, 1.2, 17, 1.8, 60);
+// pizarrón, repisas, extintor y científicos
+const piz = new THREE.Mesh(new THREE.PlaneGeometry(3.6, 2.4), new THREE.MeshBasicMaterial({ map: texPizarron })); piz.position.set(XL - 7.2, 5.4, -11.88); lab.add(piz);
+caja(3.95, 2.75, 0.15, MADERA, XL - 7.2, 5.4, -12.0, lab, false);
+for (let y = 3; y <= 9; y += 2.5) { caja(6, 0.2, 1.2, MADERA, XL + 8, y, -11.4, lab);
+  for (let i = 0; i < 6; i++) { const c = [0x3cbf5a, 0xe23c3c, 0x2d6fd6, 0xffd600, 0xc9a2d6, 0xff8a1a][(i + y) % 6];
+    if (i % 2) { bola(0.32, new THREE.MeshStandardMaterial({ color: c, transparent: true, opacity: 0.75 }), XL + 5.6 + i * 0.95, y + 0.45, -11.3, lab); cil(0.08, 0.08, 0.5, BLANCO, XL + 5.6 + i * 0.95, y + 0.9, -11.3, lab); }
+    else cil(0.25, 0.25, 0.9, new THREE.MeshStandardMaterial({ color: c, transparent: true, opacity: 0.75 }), XL + 5.6 + i * 0.95, y + 0.55, -11.3, lab); } }
+cil(0.4, 0.4, 1.6, K.toon(0xd62f3e), XL + 2.5, 1.6, -11.5, lab); caja(0.4, 0.3, 0.3, NEGRO, XL + 2.5, 2.5, -11.5, lab);
+K.cartel(lab, '¡PELIGRO!', XL + 2.5, 3.9, -11.95, 2.4, 0.8, '#ffd600', '#1b1210');
+const ingeniero = new Personaje2D('ingeniero', 4.5).agregar(lab, XL - 3, -9.5);
+const cientificos = [[XL + 9.5, -8], [XL - 10, -7.5], [XL + 13, -3.5], [XL - 13.5, -3], [XV + 9, -7], [XG - 9, -6]].map(([x, z], i) =>
+  new Personaje2D(i % 3 === 2 ? 'ingeniero' : 'medico', 4.4, 0.4).agregar(lab, x, z));
+// zona del vapor: cubito de agua vs cubote de vapor (1700 veces = 12 x 12 x 12)
+caja(2.2, 2.4, 2.2, BLANCO, XV, 1.2, 0, lab);
+const cubito = caja(0.5, 0.5, 0.5, AGUA_MAT, XV, 2.65, 0, lab);
+const cubote = caja(1, 1, 1, new THREE.MeshStandardMaterial({ color: 0xffffff, transparent: true, opacity: 0.5, depthWrite: false, emissive: 0x404858, roughness: 0.7 }), XV, 2.65, 0, lab, false);
+cubote.add(new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1)), new THREE.LineBasicMaterial({ color: 0x5a7a90 })));
+const ayudante = new Personaje2D('mama', 4.4).agregar(lab, XV - 4.2, 3.5);
+// zona de la taza y los garrafones
+caja(3, 2.3, 2, MADERA, XG, 1.15, 3.2, lab);
+const taza = new THREE.Group(); taza.position.set(XG, 2.3, 3.2); lab.add(taza);
+cil(0.45, 0.38, 0.85, K.toon(0xe23c3c), 0, 0.43, 0, taza); cil(0.4, 0.4, 0.05, AGUA_MAT, 0, 0.8, 0, taza);
+const asa = K.malla(new THREE.TorusGeometry(0.22, 0.06, 6, 14), K.toon(0xe23c3c), 0.5, 0.45, 0); taza.add(asa);
+const garrafones = [];
+for (let i = 0; i < 20; i++) {
+  const g = new THREE.Group(); g.position.set(XG - 4 + (i % 5) * 2, 0, -1 - Math.floor(i / 5) * 2.1); lab.add(g);
+  cil(0.75, 0.75, 1.9, new THREE.MeshStandardMaterial({ color: 0xbfe4ff, transparent: true, opacity: 0.45, roughness: 0.1, depthWrite: false }), 0, 0.95, 0, g);
+  cil(0.6, 0.6, 1.5, VAPOR_MAT, 0, 0.9, 0, g);
+  cil(0.25, 0.4, 0.35, new THREE.MeshStandardMaterial({ color: 0xbfe4ff, transparent: true, opacity: 0.5 }), 0, 2.05, 0, g); cil(0.28, 0.28, 0.2, K.toon(0x2d6fd6), 0, 2.3, 0, g);
+  garrafones.push(g);
+}
+const tioLab = new Personaje2D('tio', 4.5).agregar(lab, XG + 3.4, 4.2);
+const luzLab = [XL, XV, XG].map(x => { const l = new THREE.PointLight(0xeaf2ff, 22, 40, 1.3); l.position.set(x, 13, 6); lab.add(l); return l; });
+const luzFuegoLab = new THREE.PointLight(0xff9a3a, 0, 30, 1.3); luzFuegoLab.position.set(XL, 9, 4); lab.add(luzFuegoLab);
+
+// ====================================================================== estados
+function estadoCocina({ fuego = 1, azul = true, bolaP = 0, hollinK = 0, tapaK = 0, medallaV = false, perilla = 0, fugasK = 0 } = {}) {
+  fuegoSarten(fuego * 0.8, 0.6);
+  chorroCocina(0, [0, 0, 0], [0, 0, 0]);
+  flamaAzul(azul ? 0.28 : 0, 0.55);
+  bolaCocina(bolaP);
+  hollin.material.opacity = 0.85 * hollinK;
+  perillas[3].rotation.y = perilla * 1.6;
+  const enSarten = [SART[0], SART[1] + 0.28, SART[2]], enMano = [-1.4, 4.0, -5.2];
+  const k = K.suave(tapaK);
+  tapa.visible = tapaK > 0;
+  tapa.position.set(...lerp(enMano, enSarten, k)); tapa.position.y += Math.sin(k * Math.PI) * 0.8;
+  tapa.rotation.z = (1 - k) * 0.5;
+  medalla.visible = medallaV; medalla.rotation.z = Math.sin(T * 3) * 0.15;
+  fugas(fugasK * 0.45, 0.85);
+  luzFuego.intensity = 6 * fuego + 35 * Math.sin(Math.min(1, bolaP / 0.5) * Math.PI / 2) * (1 - cl((bolaP - 0.6) / 0.4)) + 6 * fugasK;
+  aceiteCocina.material.emissive.setHex(fuego > 0.3 ? 0xb06000 : 0x5a3a00);
+  sarten.position.set(...SART); sarten.rotation.set(0, 0, 0);
+}
+// laboratorio: fase 'quieto' | 'caer' | 'vapor' | 'sube' | 'arde'
+function estadoLab(fase, k = 0) {
+  const fases = ['quieto', 'caer', 'vapor', 'sube', 'arde'], f = fases.indexOf(fase);
+  vasoG.visible = f <= 1; vasoG.rotation.z = f === 1 ? -K.suave(k * 2.5) * 2.0 : 0; aguaVaso.visible = !(f === 1 && k > 0.3);
+  FONDO.emissive.setRGB(0.55, 0.1, 0.02).multiplyScalar(f === 0 ? 0.35 : 0.6 + 0.4 * Math.sin(T * 4) ** 2);
+  gotasLab.forEach((g, i) => {
+    let y = 12, s = 1;
+    if (f === 0) g.visible = false;
+    else if (f === 1) { const ki = cl(k * 1.5 - i * 0.09); g.visible = ki > 0.02;
+      y = ki < 0.4 ? 12 - K.acelera(ki / 0.4) * 5.9 : 6.1 - K.frena((ki - 0.4) / 0.6) * 2.05; }
+    else if (f === 2) { y = 4.05; s = 1 - K.suave(k * 1.3 - i * 0.05); g.visible = s > 0.02; }
+    else g.visible = false;
+    g.position.y = y; g.scale.setScalar(Math.max(0.001, s));
+  });
+  vaporLab.forEach((v, i) => {
+    let y = 4.1, s = 0;
+    if (f === 2) { const ki = cl(k * 1.3 - i * 0.05); s = 0.3 + 1.0 * K.frena(ki); y = 4.1 + ki * 0.5; if (ki <= 0) s = 0; }
+    if (f === 3) { const ki = cl(k * 1.2 - i * 0.04); y = 4.6 + K.acelera(ki) * 13; s = 1.3 + ki * 1.4; }
+    if (f === 4) { y = 18 + k * 4; s = 2.7; }
+    v.visible = s > 0.01 && f >= 2 && f <= 3; v.scale.setScalar(Math.max(0.001, s * (1 + Math.sin(T * 9 + i) * 0.06)));
+    v.position.y = y;
+  });
+  VAPOR_MAT.opacity = f === 3 ? 0.75 * (1 - cl((k - 0.75) / 0.25)) : 0.75;
+  gotitas.forEach(o => {
+    const base = vaporLab[o.j];
+    let vis = false, y = 0, x = XL + GX[o.j] + o.dx, z = GZ[o.j] + o.dz;
+    if (f === 3) { const yv = base.position.y - 1.2 - o.dy * 0.4; vis = yv > 6.1; y = yv; x = XL + GX[o.j] + o.dx * cl((yv - 6) / 4); }
+    if (f === 4) { const ki = cl(k * 1.2 - o.dy * 0.05); vis = true; y = 8.5 + o.dy * 1.3 + Math.sin(T * 2 + o.ph) * 0.2 + k * 0.8; x = XL + GX[o.j] * 1.2 + o.dx * 1.4; z = GZ[o.j] + o.dz;
+      o.f(0.55 * K.frena(ki * 2), 0.25); o.g.material = GOTA_ACEITE; }
+    if (f !== 4) o.f(0);
+    o.g.visible = vis; o.g.position.set(x, y, z);
+    o.fpos = [x, y, z];
+  });
+  flamasLab.forEach(fl => fl(0.45, 0.9));
+  bolaLab(0);
+  luzFuegoLab.intensity = f === 4 ? 40 * k : 5;
+}
+function pegarLlamitas() { gotitas.forEach(o => { if (o.fpos) o.f.grupo.position.set(o.fpos[0], o.fpos[1] - 0.15, o.fpos[2]); }); }
+
+// ====================================================================== dibujos encima
+function palomita(ctx, x, y, prog, ok = true, tam = 95) {
+  if (prog <= 0) return;
+  const k = K.rebote(Math.min(1, prog)) * tam, X = x * K.ANCHO, Y = y * K.ALTO;
+  ctx.save(); ctx.beginPath(); ctx.arc(X, Y, k, 0, 7);
+  ctx.fillStyle = ok ? '#3cbf5a' : '#e23c3c'; ctx.fill(); ctx.lineWidth = 12; ctx.strokeStyle = '#1b1210'; ctx.stroke();
+  ctx.lineWidth = k * 0.22; ctx.strokeStyle = '#fff'; ctx.lineCap = 'round'; ctx.beginPath();
+  if (ok) { ctx.moveTo(X - k * 0.45, Y); ctx.lineTo(X - k * 0.1, Y + k * 0.35); ctx.lineTo(X + k * 0.5, Y - k * 0.35); }
+  else { ctx.moveTo(X - k * 0.4, Y - k * 0.4); ctx.lineTo(X + k * 0.4, Y + k * 0.4); ctx.moveTo(X - k * 0.4, Y + k * 0.4); ctx.lineTo(X + k * 0.4, Y - k * 0.4); }
+  ctx.stroke(); ctx.restore();
+}
+function termometro(ctx, x, y, prog, nivel, color, texto) {
+  if (prog <= 0) return;
+  const k = K.rebote(Math.min(1, prog)), X = x * K.ANCHO, Y = y * K.ALTO, lleno = K.frena(cl(prog - 0.3)) * nivel;
+  ctx.save(); ctx.translate(X, Y); ctx.scale(k, k);
+  ctx.lineWidth = 14; ctx.strokeStyle = '#1b1210';
+  ctx.beginPath(); ctx.roundRect(-34, -330, 68, 330, 34); ctx.fillStyle = '#ffffff'; ctx.fill(); ctx.stroke();
+  ctx.beginPath(); ctx.arc(0, 30, 62, 0, 7); ctx.fillStyle = color; ctx.fill(); ctx.stroke();
+  ctx.fillStyle = color; ctx.fillRect(-18, -300 * lleno + 10, 36, 300 * lleno + 10);
+  ctx.strokeStyle = '#1b1210'; ctx.lineWidth = 6; for (let i = 1; i < 6; i++) { ctx.beginPath(); ctx.moveTo(-34, -i * 55); ctx.lineTo(-10, -i * 55); ctx.stroke(); }
+  ctx.restore();
+  if (prog > 0.5) K.letrero(ctx, texto, x + 0.2 * Math.sign(0.5 - x), y - 0.07, (prog - 0.5) * 2, { tam: 150, color, giro: 0 });
+}
+function flechaAbajo(ctx, x, y, prog, color = '#ffd600') {
+  if (prog <= 0) return;
+  const X = x * K.ANCHO, Y = y * K.ALTO + Math.sin(T * 10) * 12, k = K.rebote(Math.min(1, prog));
+  ctx.save(); ctx.translate(X, Y); ctx.scale(k, k); ctx.lineWidth = 12; ctx.strokeStyle = '#1b1210'; ctx.fillStyle = color;
+  ctx.beginPath(); ctx.moveTo(-30, -120); ctx.lineTo(30, -120); ctx.lineTo(30, -20); ctx.lineTo(70, -20); ctx.lineTo(0, 60); ctx.lineTo(-70, -20); ctx.lineTo(-30, -20); ctx.closePath();
+  ctx.fill(); ctx.stroke(); ctx.restore();
+}
+function burbujasO2(ctx, prog) {   // burbujitas de oxígeno que chocan con la tapa
+  if (prog <= 0) return;
+  ctx.save(); ctx.font = '64px Anton'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  [[0.18, 0.3], [0.82, 0.34], [0.12, 0.46], [0.88, 0.5], [0.3, 0.22], [0.7, 0.24]].forEach(([x, y], i) => {
+    const k = cl(prog * 2 - i * 0.12); if (k <= 0) return;
+    const X = x * K.ANCHO + Math.sin(T * 3 + i) * 14, Y = y * K.ALTO + Math.cos(T * 2.5 + i) * 10;
+    ctx.globalAlpha = k; ctx.beginPath(); ctx.arc(X, Y, 62, 0, 7); ctx.fillStyle = 'rgba(160,215,255,0.85)'; ctx.fill();
+    ctx.lineWidth = 9; ctx.strokeStyle = '#1b1210'; ctx.stroke(); ctx.fillStyle = '#1b3a6a'; ctx.fillText('O2', X, Y + 3);
+  });
+  ctx.restore();
+}
+
+// ====================================================================== guion
+const tomaSarten = (u, z = 0) => ({ pos: [2.2 + u * 0.05, 4.6, -2.4 + z - u * 0.15], mira: [0.5, 3.0, -6.5], fov: 46 });
+const fam = (cara, brazos = [15, 15]) => ({ cara, brazos });
+let tioPos = [5.5, -3.8], tioEst = {}, mamaEst = {}, mamaPos = [-2.3, -4.9], miedoFam = 0;
+
+const FRASES = [
+  { // 0. ¿Por qué nunca debes echarle agua a un sartén con aceite en llamas?
+    tomas: [[0, (u, d) => { const k = K.suave(u / (d * 0.55)); return { pos: lerp([9, 7, 11], [5.2, 5, 3.5], k), mira: lerp([4, 3.5, -4], [1.4, 3.2, -5.8], k), fov: 50 }; }],
+            [(d, P) => W(P, 8), u => ({ pos: [3.3 + u * 0.1, 4.4, -1.6], mira: [1.3, 3.0, -6.2], fov: 46 })]],
+    act: (u, d, P) => { estadoCocina({ fuego: 0.4 + 0.6 * K.suave(u / 0.8) }); estadoLab('quieto');
+      const k = K.suave((u - 0.6) / (W(P, 10) - 0.6)); tioPos = [5.5 - k * 2.5, -3.8 - k * 0.8];
+      tioEst = { cara: 'enojado', objeto: 'vaso', camina: k > 0 && k < 1, brazos: [15, 70], codos: [10, 60], voltear: true };
+      mamaPos = [-2.3, -4.9]; mamaEst = { cara: 'miedo', brazos: [150, 150], codos: [20, 20] }; miedoFam = 1; },
+    over: (ctx, u, d, P) => { K.letrero(ctx, '¿AGUA?', 0.5, 0.15, (u - W(P, 4)) / 0.3, { tam: 170, color: '#7cc4ff' });
+      palomita(ctx, 0.5, 0.42, (u - W(P, 12)) / 0.25, false, 140); },
+  },
+  { // 1. El aceite caliente puede pasar de los trescientos grados. El agua hierve a cien.
+    tomas: [[0, u => tomaSarten(u)],
+            [(d, P) => W(P, 9) - 0.05, u => ({ pos: [tioPos[0] - 0.6, 4.4, tioPos[1] + 5.5 - u * 0.2], mira: [tioPos[0] - 0.6, 3.3, tioPos[1]], fov: 44 })]],
+    act: () => { estadoCocina({ fuego: 1 }); tioPos = [3.0, -4.6]; tioEst = { cara: 'sorpresa', objeto: 'vaso', brazos: [15, 70], codos: [10, 60], voltear: true }; },
+    over: (ctx, u, d, P) => { if (u < W(P, 9) - 0.05) termometro(ctx, 0.2, 0.42, (u - W(P, 3)) / 0.6, 0.95, '#ff3b2f', '300°C');
+      else termometro(ctx, 0.8, 0.42, (u - W(P, 10)) / 0.6, 0.35, '#3d9bf0', '100°C'); },
+  },
+  { // 2. Y el agua pesa más que el aceite, así que se va directo al fondo... justo donde está más caliente.
+    tomas: [[0, u => ({ pos: [XL + 1, 9.5, 24 - u * 0.4], mira: [XL, 7.0, 0], fov: 52 })],
+            [(d, P) => W(P, 3) - 0.05, u => ({ pos: [XL - 6.6 + u * 0.05, 4.5, -3.5], mira: [XL - 6.6, 4.4, -11.9], fov: 68 })],
+            [(d, P) => W(P, 8) - 0.05, u => ({ pos: [XL + 0.3, 7.0, 15.5 - u * 0.3], mira: [XL, 4.8, 0], fov: 50 })]],
+    act: (u, d, P) => { estadoCocina({ fuego: 1 });
+      const k = u < W(P, 3) ? cl(u / W(P, 3)) * 0.35 : 0.35 + 0.65 * cl((u - W(P, 8)) / (W(P, 15) - W(P, 8)));
+      estadoLab('caer', k); ingeniero.malla.position.set(XL - 4.5, 0, -9.8); },
+    pj: [[ingeniero, (u, d, P) => ({ cara: 'feliz', habla: true, brazos: [15, 120], codos: [10, -40] })]],
+    over: (ctx, u, d, P) => { if (u > W(P, 8)) { flechaAbajo(ctx, 0.5, 0.36, (u - W(P, 12)) / 0.25, '#7cc4ff');
+        K.letrero(ctx, 'FONDO', 0.5, 0.15, (u - W(P, 14)) / 0.25, { tam: 170 });
+        K.letrero(ctx, '¡MÁS CALIENTE!', 0.5, 0.62, (u - W(P, 17)) / 0.25, { tam: 120, color: '#ff5a3a', giro: 0.05 }); } },
+  },
+  { // 3. Ahí, en menos de un segundo, se convierte en vapor.
+    tomas: [[0, u => ({ pos: [XL + 0.4, 6.0, 13 - u * 0.4], mira: [XL, 4.6, 0], fov: 48 })]],
+    act: (u, d, P) => { estadoCocina({ fuego: 1 }); estadoLab('vapor', cl((u - W(P, 6)) / Math.max(0.3, d - W(P, 6) - 0.2))); },
+    over: (ctx, u, d, P) => { K.letrero(ctx, '< 1 SEG', 0.5, 0.15, (u - W(P, 2)) / 0.25, { tam: 160, color: '#ffffff', giro: 0 });
+      K.letrero(ctx, '¡FSSS!', 0.5, 0.25, (u - W(P, 7)) / 0.25, { tam: 170 }); },
+  },
+  { // 4. Y el vapor ocupa como mil setecientas veces más espacio que el agua.
+    tomas: [[0, u => ({ pos: [XV + 0.3, 3.9, 6.5 - u * 0.2], mira: [XV, 2.7, 0], fov: 44 })],
+            [(d, P) => W(P, 5) - 0.1, u => ({ pos: [XV - 1.5, 6.5, 19 + u * 0.3], mira: [XV - 0.5, 5.2, 0], fov: 50 })]],
+    act: (u, d, P) => { const k = K.frena(cl((u - W(P, 5)) / (W(P, 9) - W(P, 5))));
+      const s = 0.5 + k * 5.5; cubote.scale.setScalar(s); cubote.position.y = 2.4 + s / 2; cubote.visible = u > W(P, 5) - 0.1; },
+    pj: [[ayudante, (u, d, P) => ({ cara: u > W(P, 6) ? 'sorpresa' : 'feliz', brazos: u > W(P, 6) ? [150, 150] : [15, 60], codos: [20, 20] })]],
+    over: (ctx, u, d, P) => { if (u < W(P, 5) - 0.1) K.letrero(ctx, 'AGUA', 0.5, 0.33, u / 0.25, { tam: 120, color: '#7cc4ff', giro: 0 });
+      K.letrero(ctx, '× 1700', 0.5, 0.14, (u - W(P, 6)) / 0.25, { tam: 200 }); },
+  },
+  { // 5. Una sola taza de agua se vuelve más de cuatrocientos litros de vapor.
+    tomas: [[0, u => ({ pos: [XG + 0.2, 4.2, 9.5 - u * 0.3], mira: [XG, 2.9, 3.2], fov: 46 })],
+            [(d, P) => W(P, 5) - 0.1, u => ({ pos: [XG + 0.5, 9.5, 20 + u * 0.3], mira: [XG, 2.2, -2.5], fov: 50 })]],
+    act: (u, d, P) => { garrafones.forEach((g, i) => { const k = (u - W(P, 6) - i * (W(P, 11) - W(P, 6)) / 22) / 0.18; g.visible = k > 0; g.scale.setScalar(Math.max(0.001, K.rebote(cl(k)))); }); },
+    pj: [[tioLab, (u, d, P) => ({ cara: u > W(P, 9) ? 'sorpresa' : 'feliz', brazos: [15, u > W(P, 9) ? 150 : 100], codos: [10, 20], voltear: true })]],
+    over: (ctx, u, d, P) => { K.letrero(ctx, '1 TAZA', 0.5, 0.15, (u - W(P, 1)) / 0.25, { tam: 170, color: '#ffffff', giro: 0 });
+      if (u > W(P, 9)) { K.letrero(ctx, '= 400 LITROS', 0.5, 0.25, (u - W(P, 9)) / 0.25, { tam: 140 });
+        K.letrero(ctx, '(20 GARRAFONES)', 0.5, 0.32, (u - W(P, 11)) / 0.25, { tam: 80, color: '#ffffff', giro: 0 }); } },
+  },
+  { // 6. Ese vapor sale disparado hacia arriba, y se lleva el aceite hecho gotitas.
+    tomas: [[0, u => ({ pos: [XL + 0.5, 7.5 + u * 0.8, 21 + u * 0.6], mira: [XL, 8 + u * 0.8, 0], fov: 52 })]],
+    act: (u, d, P) => { garrafones.forEach(g => (g.visible = false)); estadoLab('sube', cl((u - W(P, 1)) / (d - W(P, 1)))); },
+    over: (ctx, u, d, P) => { K.letrero(ctx, '¡FIUUU!', 0.5, 0.14, (u - W(P, 3)) / 0.25, { tam: 170, color: '#ffffff' });
+      K.letrero(ctx, 'GOTITAS', 0.5, 0.62, (u - W(P, 12)) / 0.25, { tam: 130, color: '#ffb020', giro: 0.05 }); },
+  },
+  { // 7. Y millones de gotitas de aceite ardiendo en el aire... son una bola de fuego.
+    tomas: [[0, u => ({ pos: [XL + 0.5, 9.5, 20 - u * 0.5], mira: [XL, 9.0, 0], fov: 52 })],
+            [(d, P) => W(P, 10) - 0.55, u => ({ pos: [6.0, 4.4, 7.5], mira: [1.2, 5.0, -6.2], fov: 54 })]],
+    act: (u, d, P) => { const enCocina = u > W(P, 10) - 0.55;
+      estadoLab('arde', cl((u - W(P, 5)) / (W(P, 9) - W(P, 5) + 0.3)));
+      const pb = cl((u - W(P, 12) + 0.1) / 3.2);
+      estadoCocina({ fuego: 1, bolaP: pb * 0.62, hollinK: cl((pb - 0.08) / 0.2) });
+      tioPos = [3.0, -4.6];
+      const lanza = cl((u - (W(P, 10) - 0.5)) / 0.45);
+      tioEst = { cara: pb > 0 ? 'miedo' : 'enojado', objeto: lanza < 0.6 ? 'vaso' : null, vuelca: lanza * 2, brazos: [pb > 0 ? 150 : 15, pb > 0 ? 160 : 70 + lanza * 60], codos: [20, 20], voltear: true };
+      chorroCocina(enCocina ? cl((u - (W(P, 10) - 0.45)) / 0.55) : 0, [1.9, 3.6, -4.4], [SART[0], SART[1] + 0.3, SART[2]], 0.7);
+      temblor = pb > 0 ? Math.max(0, 1 - pb * 4) : 0; destello = pb > 0 ? Math.max(0, 0.75 - pb * 6) : 0;
+      mamaEst = { cara: 'miedo', brazos: [160, 160], codos: [10, 10], tiembla: pb > 0 ? 1 : 0 }; },
+    over: (ctx, u, d, P) => { if (u < W(P, 10) - 0.55) K.letrero(ctx, '¡ARDEN!', 0.5, 0.14, (u - W(P, 6)) / 0.25, { tam: 170, color: '#ff8a2a' });
+      else K.letrero(ctx, '¡FUUUM!', 0.5, 0.14, (u - W(P, 12) + 0.1) / 0.2, { tam: 210, color: '#ff5a1a' }); },
+  },
+  { // 8. Lo que era una llamita en el sartén, ahora llega hasta el techo.
+    tomas: [[0, u => tomaSarten(u, 0.6)],
+            [(d, P) => W(P, 8) - 0.05, (u, d) => ({ pos: [5.5, 3.0, 8.5], mira: [1.0, 5.8, -6.3], fov: 56 })]],
+    act: (u, d, P) => { const despues = u > W(P, 8) - 0.05;
+      const pb = despues ? 0.08 + cl((u - W(P, 8)) / (d - W(P, 8) + 0.5)) * 0.55 : 0;
+      estadoCocina({ fuego: despues ? 1.4 : 0.7, bolaP: pb, hollinK: despues ? cl((pb - 0.12) / 0.25) : 0 });
+      temblor = despues ? 0.35 : 0; miedoFam = 1;
+      tioPos = [4.8, -2.4]; tioEst = { cara: 'miedo', objeto: null, brazos: [160, 160], codos: [10, 10], tiembla: 1, voltear: true };
+      mamaPos = [-4.6, -3.2]; },
+    over: (ctx, u, d, P) => { if (u < W(P, 8)) K.letrero(ctx, 'LLAMITA', 0.5, 0.15, (u - W(P, 3)) / 0.25, { tam: 160, color: '#ffffff', giro: 0 });
+      else K.letrero(ctx, '¡HASTA EL TECHO!', 0.5, 0.62, (u - W(P, 10)) / 0.25, { tam: 120, color: '#ff5a1a', giro: 0.06 }); },
+  },
+  { // 9. Entonces, ¿qué se hace? Apaga la estufa y tapa el sartén con una tapa o un trapo húmedo.
+    tomas: [[0, u => ({ pos: [-0.8, 4.8, 4.2 - u * 0.3], mira: [-0.8, 3.2, -6.2], fov: 50 })],
+            [(d, P) => W(P, 7) - 0.05, u => ({ pos: [1.3, 5.2, -2.2], mira: [0.0, 2.6, -6.4], fov: 46 })]],
+    act: (u, d, P) => { const apaga = K.suave((u - W(P, 4)) / 0.4), tapaK = cl((u - W(P, 8)) / 0.7);
+      estadoCocina({ fuego: 1 - tapaK * 0.95, azul: apaga < 0.5, perilla: apaga, tapaK, fugasK: tapaK >= 1 ? 1 : 0 });
+      miedoFam = 0; mamaPos = [-2.3, -4.9]; tioPos = [4.2, -3.6];
+      tioEst = { cara: 'sorpresa', objeto: null, brazos: [15, 15], codos: [10, 10], voltear: true };
+      mamaEst = { cara: 'feliz', objeto: tapaK > 0 ? null : (u > W(P, 6) ? 'tapa' : null), brazos: [15, u < W(P, 7) ? 75 : 95], codos: [10, u < W(P, 7) ? 70 : 40], tiembla: 0 }; },
+    over: (ctx, u, d, P) => { K.letrero(ctx, '1. APAGA', 0.5, 0.14, (u - W(P, 4)) / 0.25, { tam: 150, color: '#ffffff', giro: 0 });
+      K.letrero(ctx, '2. TAPA', 0.5, 0.22, (u - W(P, 8)) / 0.25, { tam: 150, giro: 0 });
+      if (u > W(P, 14)) { K.letrero(ctx, 'O TRAPO HÚMEDO', 0.5, 0.29, (u - W(P, 14)) / 0.25, { tam: 95, color: '#7cc4ff', giro: 0 }); }
+      palomita(ctx, 0.84, 0.2, (u - W(P, 13)) / 0.25); },
+  },
+  { // 10. Sin oxígeno, el fuego se ahoga solito.
+    tomas: [[0, u => ({ pos: [1.0, 3.9, -3.6 + u * 0.1], mira: [0.6, 2.8, -6.5], fov: 40 })]],
+    act: (u, d, P) => { const k = cl((u - W(P, 3)) / (d - W(P, 3)));
+      estadoCocina({ fuego: 0, azul: false, perilla: 1, tapaK: 1, fugasK: 1 - K.suave(k) }); },
+    over: (ctx, u, d, P) => { burbujasO2(ctx, (u - W(P, 0)) / 0.8); palomita(ctx, 0.5, 0.2, (u - W(P, 1)) / 0.25, false, 85);
+      K.letrero(ctx, 'SIN O2', 0.5, 0.34, (u - W(P, 1)) / 0.25, { tam: 130, color: '#ffffff', giro: 0 }); },
+  },
+  { // 11. Y nunca, nunca cargues el sartén para sacarlo corriendo.
+    tomas: [[0, u => ({ pos: [tioPos[0] - 1.0, 4.4, 4.2], mira: [tioPos[0] - 1.0, 3.0, -4.6], fov: 50 })]],
+    act: (u, d, P) => { const k = K.suave((u - W(P, 3)) / (W(P, 8) + 0.6 - W(P, 3)));
+      estadoCocina({ fuego: 1.1, azul: false, perilla: 1 });
+      tioPos = [1.8 - k * 5.5, -5.0 + k * 0.6];
+      // el sartén va en la mano del tío y las llamas se van para atrás
+      const sube = cl((u - W(P, 3)) / 0.3);
+      sarten.position.set(...lerp(SART, [tioPos[0] - 1.05, 2.6, tioPos[1] + 0.3], sube));
+      fuegoSarten(1.3, 0.6, k > 0 && k < 1 ? 0.6 : 0);
+      tioEst = { cara: 'miedo', objeto: null, camina: k > 0 && k < 1, brazos: [150, 80], codos: [10, 30], voltear: true, tiembla: 0.5 };
+      mamaPos = [-6.5, -2.2]; mamaEst = { cara: 'miedo', brazos: [160, 160], codos: [10, 10] }; miedoFam = 1; },
+    over: (ctx, u, d, P) => { K.letrero(ctx, '¡NUNCA!', 0.5, 0.14, (u - W(P, 1)) / 0.25, { tam: 200, color: '#ff3b2f' });
+      palomita(ctx, 0.5, 0.42, (u - W(P, 7)) / 0.25, false, 140); },
+  },
+  { // 12. El agua apaga casi todo... menos esto. Aquí, el mejor bombero es una tapa.
+    tomas: [[0, u => ({ pos: [-6.4, 4.4, 9.5 - u * 0.3], mira: [-8.8, 3.6, 1.5], fov: 48 })],
+            [(d, P) => W(P, 7) - 0.05, u => ({ pos: [1.5, 4.2, -3.5 + u * 0.1], mira: [0.6, 3.0, -6.5], fov: 42 })],
+            [(d, P) => W(P, 12) - 0.05, u => ({ pos: [5.5, 6.2, 11 + u * 0.5], mira: [3.5, 3.6, -4], fov: 52 })]],
+    act: (u, d, P) => { estadoCocina({ fuego: 0, azul: false, perilla: 1, tapaK: 1, medallaV: u > W(P, 9) });
+      miedoFam = -1; mamaPos = [-2.3, -4.9]; tioPos = [3.6, -3.6];
+      tioEst = { cara: 'feliz', objeto: null, brazos: [150, 150], codos: [10, 10], voltear: false, tiembla: 0 };
+      mamaEst = { cara: 'feliz', brazos: [150, 15], codos: [10, 10], tiembla: 0 }; },
+    pj: [[bombero, (u, d, P) => ({ cara: u > W(P, 5) ? 'preocupado' : 'feliz', objeto: u < W(P, 5) ? 'manguera' : null,
+           brazos: u > W(P, 5) ? [100, 100] : [15, 80], codos: u > W(P, 5) ? [-70, -70] : [10, 40] })]],
+    over: (ctx, u, d, P) => { if (u > W(P, 5) && u < W(P, 7)) K.letrero(ctx, '¿?', 0.62, 0.2, (u - W(P, 5)) / 0.2, { tam: 160, color: '#ffffff' });
+      K.letrero(ctx, 'EL MEJOR', 0.5, 0.13, (u - W(P, 8)) / 0.25, { tam: 140, color: '#ffffff', giro: 0 });
+      K.letrero(ctx, 'BOMBERO', 0.5, 0.21, (u - W(P, 10)) / 0.25, { tam: 170, giro: 0 });
+      palomita(ctx, 0.5, 0.33, (u - W(P, 13)) / 0.25); },
+  },
+];
+
+// ===================================================== vida de fondo y personajes de la cocina
+function vida(n, t, enLab) {
+  const re = Math.round(t * 30) % 3 === 0;
+  cocina.visible = !enLab; lab.visible = enLab;
+  if (!enLab) {
+    tio.malla.position.set(tioPos[0], 0, tioPos[1]); mama.malla.position.set(mamaPos[0], 0, mamaPos[1]);
+    tio.actualizar(t, camara, tioEst);
+    mama.actualizar(t, camara, { objeto: null, tiembla: 0, ...mamaEst });
+    const asustados = miedoFam > 0, fiesta = miedoFam < 0;
+    abuela.actualizar(t, camara, { cara: asustados ? 'miedo' : 'feliz', brazos: asustados || fiesta ? [150, 150] : [15, 15], codos: [15, 15], tiembla: asustados ? 0.6 : 0 });
+    familia.forEach((f, i) => f.actualizar(t, camara, asustados ? { cara: 'miedo', brazos: [155, 155], codos: [15, 15], tiembla: 0.6 }
+      : { cara: 'feliz', habla: i % 2 === 0, brazos: fiesta ? [150, 150] : [15, i % 2 ? 70 : 15], codos: [10, 50], tiembla: 0 }, re));
+    bombero.malla.visible = n === 12;
+    velitas.forEach(v => v(0.22, 0.12));
+    globos.forEach((g, i) => (g.position.y += Math.sin(t * 2 + i) * 0.004));
+    pinata.rotation.y = Math.sin(t * 0.8) * 0.4;
+  } else {
+    cientificos.forEach((c, i) => c.actualizar(t, camara, { cara: n === 7 ? 'sorpresa' : 'normal', objeto: i % 2 ? 'plano' : null, brazos: [15, i % 2 ? 60 : 15], codos: [10, 60] }, re));
+    ingeniero.actualizar(t, camara, { cara: 'feliz', habla: n === 2, brazos: [15, 120], codos: [10, -40] });
+    if (n !== 4) ayudante.actualizar(t, camara, { cara: 'feliz', brazos: [15, 15] });
+    if (n !== 5) tioLab.actualizar(t, camara, { cara: 'feliz', brazos: [15, 15], voltear: true });
+    pegarLlamitas();
+  }
+}
+
+// ===================================================== atmósfera
+R.convertir(escena);
+R.neblina(escena, 0xe8eef4, 0.0);
+const vaporito = R.particulas(escena, 160, 0xffffff, 0.12);
+const chispas = R.particulas(escena, 220, 0xffb040, 0.1);
+
+// ===================================================== cada cuadro
+const P_DE = n => ({ w: k => datos.frases[n].palabras[k] });
+window.cuadro = (t) => {
+  T = t;
+  let n = 0;
+  while (n + 1 < datos.frases.length && t >= datos.frases[n + 1].ini) n++;
+  temblor = 0; destello = 0;
+  const F = FRASES[n], ini = datos.frases[n].ini, dur = datos.frases[n].fin - ini, u = t - ini, P = P_DE(n);
+  // estado base y luego el de esta frase
+  garrafones.forEach(g => (g.visible = n === 5 ? g.visible : false));
+  cubote.visible = false;
+  if (F.act) F.act(u, dur, P);
+  let ti = 0;
+  const inicioToma = j => (typeof F.tomas[j][0] === 'function' ? F.tomas[j][0](dur, P) : F.tomas[j][0]);
+  while (ti + 1 < F.tomas.length && u >= inicioToma(ti + 1)) ti++;
+  const ut = u - inicioToma(ti);
+  const tm = F.tomas[ti][1](ut, dur, P);
+  const enLab = tm.mira[0] > 200;
+  K.ambiente(mundo, enLab ? 'lab' : 'dia');
+  r.gl.toneMappingExposure = enLab ? 0.85 : 1.0;
+  const foco = camara.position.distanceTo(new THREE.Vector3(...tm.mira));
+  R.enfocar(r, foco, 0.6);
+  const sacude = temblor * 0.3;
+  camara.position.set(tm.pos[0] + Math.sin(t * 91) * sacude, tm.pos[1] + Math.sin(t * 77) * sacude, tm.pos[2]);
+  camara.lookAt(...tm.mira);
+  camara.fov = tm.fov * (1 + 0.06 * (1 - K.frena(ut / 0.25)));
+  camara.updateProjectionMatrix();
+  luz.target.position.set(tm.mira[0], 0, tm.mira[2]);
+  luz.position.copy(luz.target.position).add(luz.userData.offset);
+  luz.target.updateMatrixWorld();
+  vida(n, t, enLab);
+  (F.pj || []).forEach(([pj, est]) => pj.actualizar(t, camara, est(u, dur, P)));
+  vaporito(t, camara, enLab && (n === 3 || n === 6), 0.8);
+  chispas(t, camara, (!enLab && (n === 7 || n === 8)) || (enLab && n === 7), -1.2);
+  r.efecto.render(escena, camara);
+  r.ctx.drawImage(r.gl.domElement, 0, 0);
+  if (F.over) F.over(r.ctx, u, dur, P);
+  K.destello(r.ctx, destello, '255,200,120');
+  K.subtitulos(r.ctx, datos.subs, t);
+  return r.salida.toDataURL('image/jpeg', 0.96);
+};
+window.listo = Promise.resolve();
+</script>
+</body>
+</html>

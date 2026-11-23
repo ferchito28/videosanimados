@@ -407,11 +407,17 @@ class Explicador(Escena):
     frases = []
     final_extra = 1.3  # segundos después de la última palabra
 
-    def __init__(self, voz=None):
+    def __init__(self, voz=None, insertos=None):
+        """insertos = [(segundo, duración)]: silencios metidos después en la voz; los tiempos
+        se calculan con la voz original y luego se recorren (más confiable que re-alinear)."""
         self.voz = voz
         palabras = [p for fr in self.frases for p in fr.palabras]
         if voz:
             tiempos, total = sincronizar.desde_audio(palabras, voz)
+            if insertos:
+                corre = lambda t: t + sum(seg for c, seg in insertos if c <= t)
+                tiempos = [(corre(a), corre(a) + (b - a)) for a, b in tiempos]
+                total += sum(seg for _, seg in insertos)
             self.duracion = max(total, tiempos[-1][1] + 0.4)
         else:
             tiempos = sincronizar.estimar(palabras)

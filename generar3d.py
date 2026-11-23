@@ -24,6 +24,7 @@ from escenas.titanic import Titanic  # noqa: E402
 from escenas.sueno import Sueno  # noqa: E402
 from escenas.sal import Sal  # noqa: E402
 from escenas.puentes import Puentes  # noqa: E402
+from escenas.aceite import Aceite  # noqa: E402
 from motor.sonidos import crear_pista  # noqa: E402
 
 # nombre → (clase con el guion y tiempos, página 3D)
@@ -33,6 +34,7 @@ VIDEOS = {
     "sueno": (Sueno, "motor3d/escenas/sueno.html"),
     "sal": (Sal, "motor3d/escenas/sal.html"),
     "puentes": (Puentes, "motor3d/escenas/puentes.html"),
+    "aceite": (Aceite, "motor3d/escenas/aceite.html"),
 }
 
 
@@ -62,7 +64,7 @@ def con_pausas(esc, voz, pausas, salida):
     subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", voz, "-filter_complex",
                     ";".join(filtros),
                     "-map", "[a]", "-ac", "1", "-ar", "44100", salida], check=True)
-    return salida
+    return salida, cortes
 
 
 def main():
@@ -79,8 +81,9 @@ def main():
     esc = clase(voz=os.path.abspath(a.voz)) if a.voz else clase()
     if a.voz and getattr(clase, "pausas", None):
         # respiro extra después de las frases importantes: se mete silencio en la voz
-        a.voz = con_pausas(esc, a.voz, clase.pausas, os.path.join(a.salida, "voces", f"{a.video}_pausas.wav"))
-        esc = clase(voz=os.path.abspath(a.voz))
+        original = os.path.abspath(a.voz)
+        a.voz, cortes = con_pausas(esc, a.voz, clase.pausas, os.path.join(a.salida, "voces", f"{a.video}_pausas.wav"))
+        esc = clase(voz=original, insertos=cortes)
     os.makedirs(os.path.join(RAIZ, "motor3d", "tmp"), exist_ok=True)
     ruta_json = os.path.join("motor3d", "tmp", f"{a.video}.json")
     with open(os.path.join(RAIZ, ruta_json), "w") as f:

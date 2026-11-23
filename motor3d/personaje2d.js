@@ -19,6 +19,13 @@ export const VESTUARIOS = {
   campesino: { camisa: '#9a6b42', tunica: true, sombrero: 'capucha', pelo: '#5a3a28' },
   campesina: { saco: '#6f8f4a', vestido: true, delantal: true, sombrero: 'cofia', pelo_largo: '#a0522d' },
   medico: { camisa: '#ffffff', bata: true, sombrero: null, lentes: true, pelo: '#2b2b2b' },
+  // cocina (video del aceite)
+  mama: { saco: '#e2742a', vestido: true, delantal: true, sombrero: null, pelo_largo: '#3a2a22', aretes: true },
+  tio: { camisa: '#2fae7a', rayas: '#ffffff', sombrero: 'gorra', gorra: '#e23c3c', bigote: true, pelo: '#2b2b2b' },
+  abuela: { saco: '#8a6ab0', vestido: true, chal: '#e8d8f0', sombrero: null, pelo_largo: '#d8d8d8', chongo: true, lentes: true },
+  bombero: { saco: '#c8283a', bombero: true, sombrero: 'casco_bombero', bigote: true, pelo: '#3a2a22' },
+  nino: { camisa: '#ffd600', rayas: '#2d6fd6', sombrero: 'gorra', gorra: '#2d6fd6', pelo: '#5a3a28' },
+  nina: { saco: '#ff6b8a', vestido: true, sombrero: null, pelo_largo: '#5a3a28', mono_pelo: '#ffd600' },
   // invierno (video de la sal)
   beto: { saco: '#2f7d5a', abrigo: true, bufanda: '#e23c3c', sombrero: 'gorro_lana', gorro: '#e23c3c', pelo: '#5a3a28' },
   vecino: { saco: '#f2b51a', abrigo: true, bufanda: '#7a3cbf', sombrero: 'orejeras', orejeras: '#ff6b8a', lentes_sol: true, pelo: '#2b2b2b' },
@@ -87,6 +94,12 @@ function cuerpo(ctx, v, tipo) {
     ctx.fillStyle = 'rgba(0,0,0,0.13)'; for (let y = 540; y < 780; y += 55) ctx.fillRect(130, y, 260, 9);
     ctx.fillStyle = 'rgba(255,255,255,0.18)'; for (let y = 505; y < 780; y += 55) ctx.fillRect(130, y, 260, 10);
     linea(ctx, [[256, 490], [256, 770]], 7, 'rgba(0,0,0,0.45)');
+  } else if (v.rayas) {
+    ctx.fillStyle = v.rayas; for (let y = 520; y < 780; y += 48) ctx.fillRect(130, y, 260, 16);
+  } else if (v.bombero) {
+    ctx.fillStyle = '#ffd600'; ctx.fillRect(130, 640, 260, 24); ctx.fillRect(130, 700, 260, 18);
+    ctx.fillStyle = '#e0e0e0'; ctx.fillRect(130, 652, 260, 6);
+    ctx.fillStyle = '#2b2b2b'; [570, 610].forEach(y => { ctx.fillRect(246, y, 20, 14); });
   } else if (tipo === 'pasajera') {
     ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(256, 495, 40, 0, Math.PI); ctx.fill();
     ctx.fillStyle = '#7a2f5a'; ctx.fillRect(150, 660, 220, 26);
@@ -106,6 +119,7 @@ function cuerpo(ctx, v, tipo) {
     ctx.beginPath(); ctx.roundRect(186, 468, 140, 52, 24); ctx.fill(); ctx.stroke();
     ctx.fillStyle = 'rgba(255,255,255,0.35)'; ctx.fillRect(290, 560, 38, 12); ctx.fillRect(290, 590, 38, 12);
   }
+  if (v.chal) { ctx.fillStyle = v.chal; ctx.beginPath(); ctx.moveTo(160, 505); ctx.quadraticCurveTo(256, 470, 352, 505); ctx.lineTo(300, 620); ctx.lineTo(256, 580); ctx.lineTo(212, 620); ctx.closePath(); ctx.fill(); contorno(ctx, 8); ctx.stroke(); }
   if (v.delantal) { ctx.fillStyle = '#f4f0e6'; ctx.beginPath(); ctx.roundRect(200, 600, 112, 140, 20); ctx.fill(); contorno(ctx, 8); ctx.stroke(); }
   if (tipo === 'jefe') {  // moño
     ctx.fillStyle = v.mono;
@@ -251,6 +265,12 @@ function sombrero(ctx, v) {
     ctx.beginPath(); ctx.ellipse(cx, cy - 20, 178, 170, 0, Math.PI * 1.08, Math.PI * 1.92); ctx.lineWidth = 34; ctx.strokeStyle = LINEA; ctx.stroke();
     ctx.lineWidth = 20; ctx.strokeStyle = '#555'; ctx.stroke();
     [-1, 1].forEach(l => elipse(ctx, cx + l * 168, cy + 5, 52, 60, v.orejeras, 10));
+  } else if (v.sombrero === 'casco_bombero') {
+    ctx.beginPath(); ctx.ellipse(cx, cy - 100, 230, 40, 0, 0, Math.PI * 2); ctx.fillStyle = '#a81f2e'; ctx.fill(); contorno(ctx, 11); ctx.stroke();
+    ctx.beginPath(); ctx.ellipse(cx, cy - 120, 150, 125, 0, Math.PI, 0); ctx.closePath(); ctx.fillStyle = '#d62f3e'; ctx.fill(); ctx.stroke();
+    linea(ctx, [[cx, cy - 240], [cx, cy - 125]], 10);
+    ctx.beginPath(); ctx.moveTo(cx, cy - 225); ctx.lineTo(cx + 40, cy - 190); ctx.lineTo(cx, cy - 140); ctx.lineTo(cx - 40, cy - 190); ctx.closePath();
+    ctx.fillStyle = '#f0c040'; ctx.fill(); contorno(ctx, 7); ctx.stroke();
   } else if (v.sombrero === 'gorra') {
     ctx.beginPath(); ctx.ellipse(cx, cy - 110, 150, 95, 0, Math.PI, 0); ctx.closePath();
     ctx.fillStyle = v.gorra; ctx.fill(); contorno(ctx, 11); ctx.stroke();
@@ -304,6 +324,28 @@ function dibujar(ctx, v, tipo, est, t) {
     ctx.globalAlpha = 0.6; [-14, 12].forEach((x, i) => { const k = (t * 0.8 + i * 0.5) % 1; ctx.beginPath(); ctx.arc(x + Math.sin(t * 4 + i) * 6, -60 - k * 60, 10 + k * 8, 0, 7); ctx.fillStyle = '#ffffff'; ctx.fill(); });
     ctx.restore();
   }
+  if (est.objeto === 'vaso') {   // vaso de agua
+    ctx.save(); ctx.translate(mano[0], mano[1] - 30); ctx.rotate(est.vuelca || 0);
+    ctx.beginPath(); ctx.moveTo(-34, -60); ctx.lineTo(34, -60); ctx.lineTo(26, 40); ctx.lineTo(-26, 40); ctx.closePath();
+    ctx.fillStyle = 'rgba(220,240,255,0.85)'; ctx.fill(); contorno(ctx, 7); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-31, -30); ctx.lineTo(31, -30); ctx.lineTo(26, 40); ctx.lineTo(-26, 40); ctx.closePath(); ctx.fillStyle = '#3d9bf0'; ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.7)'; ctx.fillRect(-22, -20, 8, 50);
+    ctx.restore();
+  }
+  if (est.objeto === 'tapa') {   // tapa de olla
+    ctx.save(); ctx.translate(mano[0], mano[1] - 40); ctx.rotate(-0.25);
+    ctx.beginPath(); ctx.ellipse(0, 0, 95, 30, 0, Math.PI, 0); ctx.closePath(); ctx.fillStyle = '#b9c0c8'; ctx.fill(); contorno(ctx, 8); ctx.stroke();
+    ctx.beginPath(); ctx.ellipse(0, 0, 100, 10, 0, 0, 7); ctx.fillStyle = '#8a9099'; ctx.fill(); ctx.stroke();
+    elipse(ctx, 0, -38, 22, 12, '#2b2b2b', 6);
+    ctx.fillStyle = 'rgba(255,255,255,0.6)'; ctx.beginPath(); ctx.ellipse(-40, -14, 22, 7, -0.3, 0, 7); ctx.fill();
+    ctx.restore();
+  }
+  if (est.objeto === 'manguera') {
+    ctx.save(); ctx.translate(mano[0], mano[1]);
+    linea(ctx, [[0, 0], [-40, 120], [-120, 160]], 26); linea(ctx, [[0, 0], [-40, 120], [-120, 160]], 14, '#d6b030');
+    ctx.fillStyle = '#c0c0c0'; ctx.beginPath(); ctx.roundRect(-14, -60, 28, 64, 6); ctx.fill(); contorno(ctx, 6); ctx.stroke();
+    ctx.restore();
+  }
   if (est.objeto === 'celular') {
     ctx.save(); ctx.translate(mano[0] - 10, mano[1] - 50); ctx.rotate(-0.2);
     ctx.fillStyle = 'rgba(120,190,255,0.35)'; ctx.beginPath(); ctx.arc(0, 0, 70, 0, 7); ctx.fill();
@@ -316,7 +358,10 @@ function dibujar(ctx, v, tipo, est, t) {
   // cabeza blanca con sombreado suave
   if (v.pelo) { elipse(ctx, 256 - 160, 320, 40, 60, v.pelo, 8); elipse(ctx, 256 + 160, 320, 40, 60, v.pelo, 8); }
   if (v.pelo_largo) { ctx.beginPath(); ctx.roundRect(70, 200, 372, 330, 120); ctx.fillStyle = v.pelo_largo; ctx.fill(); contorno(ctx, 10); ctx.stroke(); }
+  if (v.chongo) elipse(ctx, 256, 130, 70, 55, v.pelo_largo, 10);
+  if (v.mono_pelo) { [-1, 1].forEach(l => elipse(ctx, 256 + l * 175, 200, 40, 30, v.mono_pelo, 8)); }
   elipse(ctx, 256, 300, 172, 160, '#ffffff', 12);
+  if (v.aretes) [-1, 1].forEach(l => elipse(ctx, 256 + l * 168, 380, 14, 14, '#ffd600', 6));
   ctx.save(); ctx.beginPath(); ctx.ellipse(256, 300, 166, 154, 0, 0, Math.PI * 2); ctx.clip();
   ctx.fillStyle = 'rgba(120,130,160,0.16)'; ctx.beginPath(); ctx.ellipse(196, 360, 175, 150, 0, 0, 7); ctx.ellipse(256, 300, 200, 200, 0, 0, 7); ctx.fill('evenodd');
   ctx.restore();
